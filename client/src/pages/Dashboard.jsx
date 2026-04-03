@@ -11,6 +11,8 @@ import { safeSpots } from '../data/safeSpots';
 
 export default function Dashboard() {
   const { userData, logout, isLocationSharing, setIsLocationSharing } = useAuth();
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
 
   const [preSosActive, setPreSosActive] = useState(false);
   const [preSosCountdown, setPreSosCountdown] = useState(10);
