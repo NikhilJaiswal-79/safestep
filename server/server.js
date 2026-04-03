@@ -84,7 +84,11 @@ Please call me or contact authorities.`;
           sentCount++;
         }
       }
-      res.json({ success: true, message: `SOS sent to ${sentCount} contacts`, messageBody });
+      if (sentCount > 0) {
+        res.json({ success: true, message: `SOS sent to ${sentCount} contacts`, messageBody });
+      } else {
+        res.status(400).json({ success: false, error: 'No SMS were sent. Did you add Trusted Contacts? Are they verified in Twilio?' });
+      }
     } else {
       // Simulate
       console.log(`[SIMULATED SMS] From: ${process.env.TWILIO_PHONE_NUMBER}\nBody:\n${messageBody}\nTo: ${contacts.map(c => c.phone).join(', ')}`);

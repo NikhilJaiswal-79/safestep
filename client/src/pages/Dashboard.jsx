@@ -126,7 +126,14 @@ export default function Dashboard() {
         }
       }, 1000);
 
-      try {
+        const contacts = userData?.contacts || [];
+        if (contacts.length === 0) {
+          alert("🚨 SOS CANNOT BE SENT: You haven't added any Trusted Contacts yet!\n\nPlease go to your Profile -> Contacts to add them.");
+          setSosActive(false);
+          setSosStatus('');
+          return;
+        }
+
         console.log('🚀 Triggering SOS...');
         const response = await fetch('https://safestep-virid.vercel.app/api/sos', {
           method: 'POST',
@@ -135,7 +142,7 @@ export default function Dashboard() {
             userId: userData?.uid,
             userName: userData?.name || 'SafeStep User',
             locationLink: mapsLink,
-            contacts: userData?.contacts || []
+            contacts: contacts
           })
         });
         
