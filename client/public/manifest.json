@@ -1,0 +1,25 @@
+{
+  "short_name": "SafeStep",
+  "name": "SafeStep Women's Safety",
+  "description": "Premium Women's Safety App with SOS and Live tracking.",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "minimal-ui"],
+  "orientation": "portrait",
+  "theme_color": "#E63946",
+  "background_color": "#ffffff"
+}

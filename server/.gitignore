@@ -1,0 +1,6 @@
+node_modules/
+.env
+serviceAccountKey.json
+server_output.log
+smstest.js
+test_twilio.js
