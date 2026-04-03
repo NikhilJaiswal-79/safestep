@@ -15,6 +15,14 @@ app.use(express.json());
 // Last deploy trigger: 2026-04-03
 app.get('/', (req, res) => res.json({ status: 'SafeStep Server is live!', version: '2.1' }));
 
+// Helper to format phone numbers to E.164
+const formatPhone = (phone) => {
+  if (!phone) return null;
+  let cleaned = phone.replace(/\D/g, ''); // Remove non-digits
+  if (cleaned.length === 10) return `+91${cleaned}`; // Default to India for hackathon
+  return phone.startsWith('+') ? phone : `+${cleaned}`;
+};
+
 // Initialize Twilio
 let twilioClient;
 try {
@@ -24,7 +32,7 @@ try {
 }
 
 app.post('/api/test-sms', async (req, res) => {
-  const { phone } = req.body;
+  const phone = formatPhone(req.body.phone);
   if (!phone) return res.status(400).json({ error: 'Phone number required' });
 
   try {
@@ -66,11 +74,12 @@ Please call me or contact authorities.`;
     // Simulate or actually send if Twilio configured
     if (twilioClient && process.env.TWILIO_PHONE_NUMBER !== 'your_twilio_phone_number') {
       for (const contact of contacts) {
-        if (contact.phone) {
+        const formattedContactPhone = formatPhone(contact.phone);
+        if (formattedContactPhone) {
           await twilioClient.messages.create({
             body: messageBody,
             from: process.env.TWILIO_PHONE_NUMBER,
-            to: contact.phone
+            to: formattedContactPhone
           });
           sentCount++;
         }
@@ -101,11 +110,12 @@ Time: ${new Date().toLocaleString()}`;
     let sentCount = 0;
     if (twilioClient && process.env.TWILIO_PHONE_NUMBER !== 'your_twilio_phone_number') {
       for (const contact of contacts) {
-        if (contact.phone) {
+        const formattedContactPhone = formatPhone(contact.phone);
+        if (formattedContactPhone) {
           await twilioClient.messages.create({
             body: messageBody,
             from: process.env.TWILIO_PHONE_NUMBER,
-            to: contact.phone
+            to: formattedContactPhone
           });
           sentCount++;
         }
