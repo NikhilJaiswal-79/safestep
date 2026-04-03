@@ -10,9 +10,8 @@ function generateSessionId() {
 }
 
 export default function LiveLocation() {
-  const { currentUser, userData } = useAuth();
+  const { currentUser, userData, isLocationSharing, setIsLocationSharing } = useAuth();
   const navigate = useNavigate();
-  const [isSharing, setIsSharing] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [contactCount, setContactCount] = useState(0);
@@ -48,7 +47,7 @@ export default function LiveLocation() {
   const startSharing = async () => {
     const sid = generateSessionId();
     setSessionId(sid);
-    setIsSharing(true);
+    setIsLocationSharing(true);
     setContactCount(userData?.contacts?.length || 0);
 
     // Initial location push
@@ -68,7 +67,7 @@ export default function LiveLocation() {
         await deleteDoc(doc(db, 'liveSessions', sessionId));
       } catch (_) {}
     }
-    setIsSharing(false);
+    setIsLocationSharing(false);
     setSessionId(null);
   };
 
@@ -101,7 +100,7 @@ export default function LiveLocation() {
           </div>
         )}
 
-        {!isSharing ? (
+        {!isLocationSharing ? (
           <div className="flex flex-col gap-5">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-center">
               <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">

@@ -73,15 +73,19 @@ Please call me or contact authorities.`;
     
     // Simulate or actually send if Twilio configured
     if (twilioClient && process.env.TWILIO_PHONE_NUMBER !== 'your_twilio_phone_number') {
+      console.log(`📡 SOS Request received. Processing ${contacts.length} contacts...`);
       for (const contact of contacts) {
         const formattedContactPhone = formatPhone(contact.phone);
         if (formattedContactPhone) {
+          console.log(`📤 Dispatching real SMS to: ${formattedContactPhone}`);
           await twilioClient.messages.create({
             body: messageBody,
             from: process.env.TWILIO_PHONE_NUMBER,
             to: formattedContactPhone
           });
           sentCount++;
+        } else {
+          console.log(`⚠️ Invalid phone found for contact: ${contact.name}`);
         }
       }
       if (sentCount > 0) {

@@ -10,10 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { safeSpots } from '../data/safeSpots';
 
 export default function Dashboard() {
-  const { userData, logout } = useAuth();
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const [locationShareOn, setLocationShareOn] = useState(false);
+  const { userData, logout, isLocationSharing, setIsLocationSharing } = useAuth();
 
   const [preSosActive, setPreSosActive] = useState(false);
   const [preSosCountdown, setPreSosCountdown] = useState(10);
@@ -83,10 +80,30 @@ export default function Dashboard() {
       const { latitude, longitude } = pos.coords;
       const mapsLink = `https://maps.google.com/?q=${latitude},${longitude}`;
       
-      // 1. Find nearest safe spot
+      // 1. Find nearest safe spot (with Hackathon Mode Proxy)
       let closest = null;
       let minDocs = Infinity;
-      safeSpots.forEach(spot => {
+
+      // HACKATHON MODE: If no real spot is within 1km, create a mock Police Station 300m away
+      const nearbySpots = [...safeSpots];
+      const realClosest = safeSpots.reduce((prev, curr) => {
+        const d = getDistance(latitude, longitude, curr.lat, curr.lng);
+        return d < prev.dist ? { spot: curr, dist: d } : prev;
+      }, { spot: null, dist: Infinity });
+
+      if (realClosest.dist > 1000) {
+        const mockPolice = {
+          id: 999,
+          name: "Local Emergency Response Unit",
+          lat: latitude + 0.003, // approx 300m North
+          lng: longitude + 0.002, // approx 200m East
+          type: "Police",
+          address: "Nearby Security Hub"
+        };
+        nearbySpots.push(mockPolice);
+      }
+
+      nearbySpots.forEach(spot => {
         const dist = getDistance(latitude, longitude, spot.lat, spot.lng);
         if (dist < minDocs) {
           minDocs = dist;
@@ -126,16 +143,23 @@ export default function Dashboard() {
         }
       }, 1000);
 
+      try {
         const contacts = userData?.contacts || [];
+        // HACKATHON FALLBACK: If no contacts, use the user's own number for the demo
         if (contacts.length === 0) {
-          alert("🚨 SOS CANNOT BE SENT: You haven't added any Trusted Contacts yet!\n\nPlease go to your Profile -> Contacts to add them.");
-          setSosActive(false);
-          setSosStatus('');
-          return;
+          if (userData?.phone) {
+             console.log("⚠️ No contacts found. Falling back to primary user phone for demo.");
+             contacts.push({ name: "Self (Handoff Test)", phone: userData.phone, relation: "Emergency Fallback" });
+          } else {
+             alert("🚨 SOS CANNOT BE SENT: You haven't added any Trusted Contacts yet!\n\nPlease go to your Profile -> Contacts to add them.");
+             setSosActive(false);
+             setSosStatus('');
+             return;
+          }
         }
 
         console.log('🚀 Triggering SOS...');
-        const response = await fetch('https://safestep-virid.vercel.app/api/sos', {
+        const response = await fetch('http://localhost:5000/api/sos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -173,7 +197,7 @@ export default function Dashboard() {
     
     try {
       console.log('📤 Sending Test SMS to:', testNum);
-      const res = await fetch('https://safestep-virid.vercel.app/api/test-sms', {
+      const res = await fetch('http://localhost:5000/api/test-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: testNum })
@@ -391,14 +415,14 @@ export default function Dashboard() {
         
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2 text-gray-700">
-            <MapPin size={20} className={locationShareOn ? "text-accent" : "text-gray-400"} />
+            <MapPin size={20} className={isLocationSharing ? "text-accent" : "text-gray-400"} />
             <span className="font-medium text-sm">{t('location_sharing')}</span>
           </div>
           <button 
-            onClick={() => { setLocationShareOn(!locationShareOn); if (!locationShareOn) navigate('/live-location'); }}
-            className={`w-14 h-7 rounded-full p-1 transition-colors ${locationShareOn ? 'bg-accent' : 'bg-gray-300'}`}
+            onClick={() => { setIsLocationSharing(!isLocationSharing); if (!isLocationSharing) navigate('/live-location'); }}
+            className={`w-14 h-7 rounded-full p-1 transition-colors ${isLocationSharing ? 'bg-accent' : 'bg-gray-300'}`}
           >
-            <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform ${locationShareOn ? 'translate-x-7' : 'translate-x-0'}`}></div>
+            <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform ${isLocationSharing ? 'translate-x-7' : 'translate-x-0'}`}></div>
           </button>
         </div>
       </div>

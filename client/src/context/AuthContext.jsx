@@ -13,6 +13,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState(null); // Data from Firestore
   const [loading, setLoading] = useState(true);
+  const [isLocationSharing, setIsLocationSharing] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -55,7 +56,9 @@ export function AuthProvider({ children }) {
     loading,
     loginWithGoogle,
     logout,
-    updateProfile
+    updateProfile,
+    isLocationSharing,
+    setIsLocationSharing
   };
 
   return (
