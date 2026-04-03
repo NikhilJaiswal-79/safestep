@@ -100,7 +100,13 @@ Please call me or contact authorities.`;
     }
   } catch (error) {
     console.error('Error sending SOS SMS:', error);
-    res.status(500).json({ error: 'Failed to send SOS' });
+    if (error.code === 21608) {
+      res.status(403).json({ 
+        error: 'TWILIO TRIAL ERROR: The number you are texting is not "Verified" in your Twilio Console. Please add it to "Verified Caller IDs" on Twilio.com' 
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to send SOS' });
+    }
   }
 });
 
