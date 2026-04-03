@@ -128,7 +128,7 @@ export default function Dashboard() {
 
       try {
         console.log('🚀 Triggering SOS...');
-        const response = await fetch('https://safestep-backend-9876.loca.lt/api/sos', {
+        const response = await fetch('https://safestep-virid.vercel.app/api/sos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -166,7 +166,7 @@ export default function Dashboard() {
     
     try {
       console.log('📤 Sending Test SMS to:', testNum);
-      const res = await fetch('https://safestep-backend-9876.loca.lt/api/test-sms', {
+      const res = await fetch('https://safestep-virid.vercel.app/api/test-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: testNum })

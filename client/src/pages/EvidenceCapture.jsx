@@ -88,7 +88,7 @@ export default function EvidenceCapture() {
             });
 
             // Send to Backend for SMS notification to contacts
-            await fetch('https://safestep-backend-9876.loca.lt/api/sos-evidence', {
+            await fetch('https://safestep-virid.vercel.app/api/sos-evidence', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
