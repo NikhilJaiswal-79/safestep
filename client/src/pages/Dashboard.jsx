@@ -24,8 +24,6 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
-  const [preSosActive, setPreSosActive] = useState(false);
-  const [preSosCountdown, setPreSosCountdown] = useState(10);
   const [respondersCount, setRespondersCount] = useState(0);
   const [nearestSpot, setNearestSpot] = useState(null);
   const [spotDistance, setSpotDistance] = useState(0);
@@ -45,17 +43,19 @@ export default function Dashboard() {
     }
   }, [sosActive, sosCountdown]);
 
-  // Auto-trigger logic
+  // Persistent Vibration during countdown
   useEffect(() => {
-    let timer;
-    if (preSosActive && preSosCountdown > 0) {
-      timer = setTimeout(() => setPreSosCountdown(prev => prev - 1), 1000);
-    } else if (preSosActive && preSosCountdown === 0) {
-      setPreSosActive(false);
-      triggerSOS();
+    let vibe;
+    if (sosActive && sosCountdown > 0) {
+      if ("vibrate" in navigator) {
+        vibe = setInterval(() => navigator.vibrate([800, 200]), 1000);
+      }
     }
-    return () => clearTimeout(timer);
-  }, [preSosActive, preSosCountdown]);
+    return () => {
+      clearInterval(vibe);
+      if ("vibrate" in navigator) navigator.vibrate(0);
+    };
+  }, [sosActive, sosCountdown]);
 
   // Listen for responders
   useEffect(() => {
@@ -74,22 +74,18 @@ export default function Dashboard() {
   }, [sosAlertId]);
 
   const handleScreamDetected = useCallback(() => {
-    if (!sosActive && !preSosActive) {
-      setPreSosActive(true);
-      setPreSosCountdown(10);
-      if ("vibrate" in navigator) navigator.vibrate([500, 200, 500, 200, 500, 200]);
+    if (!sosActive) {
+      triggerSOS();
     }
-  }, [sosActive, preSosActive]);
+  }, [sosActive]);
 
   const { isListening: screamDetectOn, toggleListening: toggleScream, error: screamError } = useScreamDetection(handleScreamDetected);
 
   const handleShakeDetected = useCallback(() => {
-    if (!sosActive && !preSosActive) {
-      setPreSosActive(true);
-      setPreSosCountdown(10);
-      if ("vibrate" in navigator) navigator.vibrate([500, 200, 500, 200, 500, 200]);
+    if (!sosActive) {
+      triggerSOS();
     }
-  }, [sosActive, preSosActive]);
+  }, [sosActive]);
 
   const { isShakeEnabled, toggleShake, permissionError } = useShakeToSOS(handleShakeDetected);
 
@@ -101,17 +97,26 @@ export default function Dashboard() {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) * 1000;
   };
 
+  const speak = (text) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = i18n.language.startsWith('hi') ? 'hi-IN' : 'en-US';
+    window.speechSynthesis.speak(utterance);
+  };
+
   const triggerSOS = () => {
     setSosActive(true);
     setSosStatus(t('sos_countdown_active'));
     setSosCountdown(10);
-    if ("vibrate" in navigator) navigator.vibrate([500, 200, 500, 200, 500, 200]);
+    speak(t('sos_countdown_active'));
     
-    // Pre-capture media globally
+    // Pre-capture media globally AND START RECORDING IMMEDIATELY (to bypass browser blocks)
     navigator.mediaDevices.getUserMedia({ audio: true, video: true })
       .then(stream => {
         setSosMediaStream(stream);
-        console.log('🎤 Global media stream ready.');
+        console.log('🎤 Global media stream ready. Starting recording...');
+        startEmergencyRecording(stream);
       })
       .catch(e => console.error("❌ Media capture error:", e));
 
@@ -144,7 +149,11 @@ export default function Dashboard() {
     // Use legacy but robust maps link format for all devices
     const mapsLink = `https://maps.google.com/maps?q=${lat},${lng}`;
 
-    if (nearestSpot) startGuidance();
+    if (nearestSpot) {
+      startGuidance();
+      speak(t('help_way'));
+      setTimeout(() => speak(`Safe spot found at ${nearestSpot.name}`), 2000);
+    }
 
     // SMS
     try {
@@ -166,8 +175,7 @@ export default function Dashboard() {
       setSosAlertId(docRef.id);
     } catch (e) { console.error('❌ Volunteer Alert Error:', e); }
 
-    // Global Recording (using pre-captured stream)
-    startEmergencyRecording(sosMediaStream);
+    // Global Recording was started at T=10
   };
 
   const startGuidance = () => {
@@ -182,6 +190,7 @@ export default function Dashboard() {
     setSosCountdown(10);
     stopEmergencyRecording();
     if ("vibrate" in navigator) navigator.vibrate(0);
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     if (sosAlertId) {
       try {
         await updateDoc(doc(db, 'sos_alerts', sosAlertId), { status: 'cancelled', cancelledAt: serverTimestamp() });
@@ -217,21 +226,7 @@ export default function Dashboard() {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">
-        {preSosActive ? (
-          <div className="flex flex-col items-center justify-center bg-orange-50 w-full aspect-square rounded-[40px] p-8 border-4 border-orange-200 shadow-2xl shadow-orange-100 animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-orange-200 rounded-full flex items-center justify-center mb-4 animate-bounce">
-              <Smartphone size={40} className="text-orange-600" />
-            </div>
-            <h2 className="text-3xl font-black text-orange-600 mb-2">{t('shake_detected')}</h2>
-            <div className="text-8xl font-black text-orange-600 mb-6 drop-shadow-sm">{preSosCountdown}</div>
-            <p className="text-center text-orange-500/80 font-bold text-sm mb-8 leading-tight">
-              SOS firing in {preSosCountdown}s.<br/>Shake to dismiss or click below.
-            </p>
-            <button onClick={() => {setPreSosActive(false); setPreSosCountdown(10); if(navigator.vibrate) navigator.vibrate(0);}} className="w-full py-5 bg-slate-800 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-transform tracking-widest text-lg uppercase">
-              {t('cancel')}
-            </button>
-          </div>
-        ) : sosActive ? (
+        {sosActive ? (
           <div className="flex flex-col items-center justify-center bg-rose-50 w-full min-h-[500px] rounded-[40px] p-8 border-4 border-rose-200 shadow-2xl shadow-rose-100 animate-in zoom-in-95 duration-300">
             <h2 className="text-2xl font-black text-rose-600 mb-2 uppercase tracking-tight">{sosStatus}</h2>
             <div className="text-9xl font-black text-rose-600 mb-8 drop-shadow-md leading-none">{sosCountdown}</div>
@@ -282,7 +277,7 @@ export default function Dashboard() {
       </div>
 
       {/* Feature Toggles */}
-      {!sosActive && !preSosActive && (
+      {!sosActive && (
         <>
           <div className="px-8 mb-8 grid gap-4 shrink-0">
              <div className="flex justify-between items-center bg-white p-5 rounded-3xl shadow-sm border border-slate-100">

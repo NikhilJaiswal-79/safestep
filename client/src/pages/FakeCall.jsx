@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneOff, X, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const DEFAULT_CALLER = 'Mom';
 const DEFAULT_DELAY_OPTIONS = [
