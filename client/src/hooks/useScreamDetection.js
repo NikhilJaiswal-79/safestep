@@ -21,6 +21,12 @@ export default function useScreamDetection(onScreamDetected) {
   const animFrameRef = useRef(null);
   const isListeningRef = useRef(false);
   const triggerCountRef = useRef(0);
+  
+  // Keep track of the freshest callback to avoid stale closures (always seeing sosActive as false)
+  const latestCallbackRef = useRef(onScreamDetected);
+  useEffect(() => {
+    latestCallbackRef.current = onScreamDetected;
+  }, [onScreamDetected]);
 
   const stopListening = () => {
     isListeningRef.current = false;
@@ -80,7 +86,9 @@ export default function useScreamDetection(onScreamDetected) {
           triggerCountRef.current += 1;
           if (triggerCountRef.current >= REQUIRED_FRAMES) {
             triggerCountRef.current = 0;
-            onScreamDetected();
+            if (latestCallbackRef.current) {
+              latestCallbackRef.current();
+            }
           }
         } else {
           triggerCountRef.current = Math.max(0, triggerCountRef.current - 1);
