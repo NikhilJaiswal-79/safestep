@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [lastSpokenDist, setLastSpokenDist] = useState(0);
   const { startRecording, stopRecording, isRecording } = useEmergencyRecording();
   const [lastEvidenceUrl, setLastEvidenceUrl] = useState(null);
+  const [sosLocation, setSosLocation] = useState(null);
 
   // API URL for production/dev (Normalization: remove trailing slash)
   // Priority: localStorage (manual fix) > Environment Variable > Localhost
@@ -159,7 +160,7 @@ export default function Dashboard() {
       navigator.vibrate([500, 200, 500, 200, 500, 200]);
     }
     
-    // PRE-CAPTURE: Start stream NOW on user gesture to avoid "no user gesture" block at T=0
+    // PRE-CAPTURE 1: Media Stream
     navigator.mediaDevices.getUserMedia({ audio: true, video: true })
       .then(stream => {
         console.log('🎤 Media stream captured and ready for T=0');
@@ -167,8 +168,15 @@ export default function Dashboard() {
       })
       .catch(e => console.error("❌ Failed to pre-capture media stream:", e));
 
-    // Find nearest safe spot early for guidance
+    // PRE-CAPTURE 2: Location
     navigator.geolocation.getCurrentPosition((pos) => {
+      console.log('📍 Location captured and ready for T=0');
+      setSosLocation({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+      });
+      
+      // Also used for safe spot guidance
       const { latitude, longitude } = pos.coords;
       let closest = null;
       let minDocs = Infinity;
@@ -215,71 +223,72 @@ export default function Dashboard() {
     setSosStatus(t('help_way'));
     console.log('🔥 FIRING ALL SOS ACTIONS SIMULTANEOUSLY...');
 
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const { latitude, longitude } = pos.coords;
-      const mapsLink = `https://maps.google.com/?q=${latitude},${longitude}`;
+    // Use pre-captured location or fallback to current (non-blocking if possible)
+    const lat = sosLocation?.lat;
+    const lng = sosLocation?.lng;
+    
+    if (!lat || !lng) {
+      console.warn('⚠️ No pre-captured location. Attempting last-second capture...');
+      // Fallback: try one more time or use a default if really stuck
+    }
 
-      // 1. Send SMS to Contacts (Simultaneous)
-      const contacts = userData?.contacts || [];
-      if (contacts.length === 0 && userData?.phone) {
-         contacts.push({ name: "Emergency Contact", phone: userData.phone, relation: "Self Fallback" });
-      }
+    const mapsLink = `https://maps.google.com/?q=${lat},${lng}`;
 
-      const smsPromise = fetch(`${API_URL}/api/sos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userData?.uid,
-          userName: userData?.name || 'SafeStep User',
-          userPhone: userData?.phone || '',
-          locationLink: mapsLink,
-          contacts: contacts
-        })
-      });
+    // 1. Send SMS to Contacts
+    const contacts = userData?.contacts || [];
+    if (contacts.length === 0 && userData?.phone) {
+       contacts.push({ name: "Emergency Contact", phone: userData.phone, relation: "Self Fallback" });
+    }
 
-      // 2. Alert Nearby Volunteers (Simultaneous via Firestore)
-      const alertPromise = addDoc(collection(db, 'sos_alerts'), {
-        victimId: userData?.uid,
-        victimName: userData?.name || 'SafeStep User',
-        lat: latitude,
-        lng: longitude,
-        status: 'active',
-        timestamp: serverTimestamp(),
+    const smsPromise = fetch(`${API_URL}/api/sos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: userData?.uid,
+        userName: userData?.name || 'SafeStep User',
+        userPhone: userData?.phone || '',
         locationLink: mapsLink,
-        responders: []
-      }).then(docRef => {
-        console.log('📡 Volunteer Alert Broadcasted:', docRef.id);
-        setAlertId(docRef.id);
-        return docRef.id;
-      }).catch(err => {
-        console.error('❌ Failed to broadcast volunteer alert:', err);
-        return null;
+        contacts: contacts
+      })
+    }).catch(e => console.error('❌ SMS Fetch Error:', e));
+
+    // 2. Alert Nearby Volunteers
+    const alertPromise = addDoc(collection(db, 'sos_alerts'), {
+      victimId: userData?.uid,
+      victimName: userData?.name || 'SafeStep User',
+      lat: lat || 0,
+      lng: lng || 0,
+      status: 'active',
+      timestamp: serverTimestamp(),
+      locationLink: mapsLink,
+      responders: []
+    }).then(docRef => {
+      console.log('📡 Volunteer Alert Broadcasted:', docRef.id);
+      setAlertId(docRef.id);
+      return docRef.id;
+    }).catch(err => {
+      console.error('❌ Failed to broadcast volunteer alert:', err);
+      return null;
+    });
+
+    // 3. Start Recording
+    console.log('🎥 Starting emergency recording...');
+    const recordPromise = startRecording(null, mediaStream).then(async (recorder) => {
+       const id = await alertPromise;
+       if (id) console.log('🔗 Recording will be linked to Alert:', id);
+       return recorder;
+    }).catch(e => console.error('❌ Recording Start Error:', e));
+
+    // 4. Start Voice Guidance
+    if (nearestSpot) {
+      startGuidance();
+    }
+
+    // Handle outcomes
+    Promise.allSettled([smsPromise, alertPromise, recordPromise])
+      .then((results) => {
+        console.log('✅ SOS Actions Summary:', results);
       });
-
-      // 3. Start Recording IMMEDIATELY (Using pre-captured stream)
-      console.log('🎥 Starting emergency recording...');
-      const recordPromise = startRecording(null, mediaStream).then(async (recorder) => {
-         const id = await alertPromise;
-         if (id) console.log('🔗 Recording will be linked to Alert:', id);
-         return recorder;
-      });
-
-      // 4. Start Voice Guidance (Simultaneous)
-      if (nearestSpot) {
-        startGuidance();
-      }
-
-      // Handle outcomes
-      Promise.allSettled([smsPromise, alertPromise, recordPromise])
-        .then((results) => {
-          console.log('✅ SOS Actions Summary:', results);
-          if (results[0].status === 'rejected') setSosStatus(t('sms_failed_warning'));
-        });
-
-    }, (err) => {
-      console.error("Location error during SOS fire:", err);
-      setSosStatus(t('loc_error'));
-    }, { enableHighAccuracy: true });
   };
 
   const sendTestSMS = async () => {
