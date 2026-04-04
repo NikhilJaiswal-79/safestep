@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { storage, db } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const STORAGE_KEY = 'nirbhaya_nari_evidence';
 
@@ -33,13 +33,23 @@ export default function EvidenceCapture() {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    return () => {
-      clearInterval(timerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-    };
-  }, []);
+    if (!currentUser) return;
+    const q = query(
+      collection(db, 'user_evidence'),
+      where('userId', '==', currentUser.uid),
+      orderBy('timestamp', 'desc')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const records = snap.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data(),
+        // Convert Firestore timestamp to ISO string for compatibility
+        timestamp: d.data().timestamp?.toDate?.()?.toISOString() || new Date().toISOString()
+      }));
+      setEvidenceList(records);
+    });
+    return () => unsub();
+  }, [currentUser]);
 
   const startRecording = async (type) => {
     try {
@@ -58,47 +68,39 @@ export default function EvidenceCapture() {
       recorder.onstop = async () => {
         const mimeType = type === 'video' ? 'video/webm' : 'audio/webm';
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const timestamp = new Date().toISOString();
-        const ext = type === 'video' ? 'webm' : 'webm';
-        const fileName = `evidence_${currentUser?.uid?.slice(0, 6)}_${Date.now()}.${ext}`;
+        const fileName = `manual_${currentUser?.uid?.slice(0, 6)}_${Date.now()}.webm`;
 
-        const newItem = { id: Date.now(), type, url, fileName, timestamp, size: blob.size };
-        setEvidenceList(prev => {
-          const updated = [newItem, ...prev];
-          saveEvidence(updated.map(e => ({ ...e, url: null }))); // Don't save blob URLs to localStorage
-          return updated;
-        });
-
-        // 🚀 Upload Evidence to Firebase Storage & Notify Contacts if SOS active
         setUploading(true);
         try {
           const storageRef = ref(storage, `evidence/${currentUser.uid}/${fileName}`);
           await uploadBytes(storageRef, blob);
           const downloadUrl = await getDownloadURL(storageRef);
 
-          // Check if there is an active SOS for this user
+          // Save to User Evidence collection (UI will auto-update)
+          await addDoc(collection(db, 'user_evidence'), {
+            userId: currentUser.uid,
+            fileName,
+            url: downloadUrl,
+            timestamp: serverTimestamp(),
+            type
+          });
+
+          // Check if there is an active SOS for this user to link 
           const q = query(collection(db, 'sos_alerts'), where('victimId', '==', currentUser.uid), where('status', '==', 'active'));
           const querySnapshot = await getDocs(q);
           
           if (!querySnapshot.empty) {
             const sosDoc = querySnapshot.docs[0];
-            await updateDoc(doc(db, 'sos_alerts', sosDoc.id), {
-              evidenceUrl: downloadUrl
-            });
+            await updateDoc(doc(db, 'sos_alerts', sosDoc.id), { evidenceUrl: downloadUrl });
 
-            // Send to Backend for SMS notification to contacts
+            // Notify backend
             const productionUrl = 'https://safestep-virid.vercel.app';
             const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || productionUrl;
             const API_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
             await fetch(`${API_URL}/api/sos-evidence`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userId: currentUser.uid,
-                evidenceLink: downloadUrl,
-                contacts: userData?.contacts || []
-              })
+              body: JSON.stringify({ userId: currentUser.uid, evidenceLink: downloadUrl, contacts: userData?.contacts || [] })
             });
           }
         } catch (err) {
@@ -140,11 +142,8 @@ export default function EvidenceCapture() {
   };
 
   const downloadEvidence = (item) => {
-    if (!item.url) return alert('This recording is only stored as metadata. Start a new recording to capture fresh evidence.');
-    const a = document.createElement('a');
-    a.href = item.url;
-    a.download = item.fileName;
-    a.click();
+    if (!item.url) return alert('No download URL available.');
+    window.open(item.url, '_blank');
   };
 
   const formatTime = (s) => {

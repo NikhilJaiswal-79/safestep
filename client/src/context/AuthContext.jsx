@@ -127,21 +127,25 @@ export function AuthProvider({ children }) {
           await uploadBytes(storageRef, blob);
           const downloadUrl = await getDownloadURL(storageRef);
 
-          const q = query(
-            collection(db, 'sos_alerts'), 
-            where('victimId', '==', currentUser.uid), 
-            where('status', '==', 'active')
-          );
-          const snap = await getDocs(q);
+          // Use the persistent SOS Alert ID from state (even if SOS was just cancelled)
+          const targetAlertId = sosAlertId;
           
-          if (!snap.empty) {
-            const targetAlertId = snap.docs[0].id;
+          if (targetAlertId) {
             await updateDoc(doc(db, 'sos_alerts', targetAlertId), {
               evidenceUrl: downloadUrl,
               evidenceTimestamp: serverTimestamp()
             });
-            console.log('✅ Global Alert updated with evidence link.');
+            console.log(`✅ Alert ${targetAlertId} updated with evidence link.`);
           }
+
+          // Also save to a permanent User Evidence collection for the Capture history
+          await addDoc(collection(db, 'user_evidence'), {
+            userId: currentUser.uid,
+            fileName,
+            url: downloadUrl,
+            timestamp: serverTimestamp(),
+            type: 'video'
+          });
         } catch (err) {
           console.error("Failed to upload emergency evidence:", err);
         }
