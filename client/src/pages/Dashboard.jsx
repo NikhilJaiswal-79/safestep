@@ -294,11 +294,14 @@ export default function Dashboard() {
             </button>
           </div>
         ) : (
-          <div className="relative group">
+          <div className="relative group flex flex-col items-center">
             <div className="absolute -inset-10 bg-rose-500/20 rounded-full blur-[60px] animate-[pulse_4s_infinite] group-hover:bg-rose-500/30 transition-all"></div>
             <button onClick={triggerSOS} className="w-56 h-56 rounded-full bg-gradient-to-tr from-rose-600 to-rose-400 flex items-center justify-center shadow-2xl shadow-rose-200 border-8 border-white active:scale-90 transition-all relative z-10 overflow-hidden">
                <div className="absolute inset-0 bg-white/20 opacity-0 group-active:opacity-100 transition-opacity"></div>
                <span className="text-white text-6xl font-black italic tracking-tighter drop-shadow-md">SOS</span>
+            </button>
+            <button onClick={() => { triggerSOS(); setSosCountdown(3); }} className="mt-8 px-6 py-2 bg-white text-slate-500 border border-slate-200 font-bold rounded-full text-[10px] shadow-sm uppercase tracking-widest active:scale-95 transition z-10 relative hover:bg-slate-50">
+               ⚡ Quick Test (3s)
             </button>
           </div>
         )}
