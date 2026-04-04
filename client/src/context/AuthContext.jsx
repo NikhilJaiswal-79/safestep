@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
@@ -13,6 +13,8 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [isLocationSharing, setIsLocationSharing] = useState(false);
   
   // PERSISTENT SOS STATE
@@ -22,17 +24,26 @@ export function AuthProvider({ children }) {
   const [sosAlertId, setSosAlertId] = useState(null);
   const [sosLocation, setSosLocation] = useState(null);
 
+  // GLOBAL RECORDING STATE
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+
   // Restore SOS state from localStorage on load (survives refreshes)
   useEffect(() => {
     const saved = localStorage.getItem('NIRBHAYA_SOS_STATE');
     if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.sosActive) {
-        setSosActive(true);
-        setSosCountdown(parsed.sosCountdown);
-        setSosStatus(parsed.sosStatus || '');
-        setSosAlertId(parsed.sosAlertId);
-        setSosLocation(parsed.sosLocation);
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.sosActive) {
+          setSosActive(true);
+          setSosCountdown(parsed.sosCountdown);
+          setSosStatus(parsed.sosStatus || '');
+          setSosAlertId(parsed.sosAlertId);
+          setSosLocation(parsed.sosLocation);
+        }
+      } catch (e) {
+        console.error("SOS Restore Error:", e);
       }
     }
   }, []);
@@ -57,13 +68,14 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        // Fetch additional user data from firestore
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setUserData(docSnap.data());
-        } else {
-          setUserData(null);
+        try {
+          const docRef = doc(db, "users", user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setUserData(docSnap.data());
+          }
+        } catch (e) {
+          console.error("UserData Fetch Error:", e);
         }
       } else {
         setUserData(null);
@@ -114,7 +126,6 @@ export function AuthProvider({ children }) {
           await uploadBytes(storageRef, blob);
           const downloadUrl = await getDownloadURL(storageRef);
 
-          // Find the active SOS for this user
           const q = query(
             collection(db, 'sos_alerts'), 
             where('victimId', '==', currentUser.uid), 
@@ -161,7 +172,6 @@ export function AuthProvider({ children }) {
       if (!currentUser) return;
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const { latitude, longitude } = pos.coords;
-        // Use a generic session name for background sharing
         await setDoc(doc(db, 'liveSessions', `bg-${currentUser.uid}`), {
           userId: currentUser.uid,
           name: userData?.name || 'Nirbhaya Nari User',
@@ -174,7 +184,7 @@ export function AuthProvider({ children }) {
     };
 
     if (isLocationSharing && currentUser) {
-      pushLocation(); // Initial
+      pushLocation(); 
       interval = setInterval(pushLocation, 10000);
     }
 
@@ -192,13 +202,11 @@ export function AuthProvider({ children }) {
     updateProfile,
     isLocationSharing,
     setIsLocationSharing,
-    // SOS State
     sosActive, setSosActive,
     sosCountdown, setSosCountdown,
     sosStatus, setSosStatus,
     sosAlertId, setSosAlertId,
     sosLocation, setSosLocation,
-    // Recording
     isRecording, startEmergencyRecording, stopEmergencyRecording
   };
 
