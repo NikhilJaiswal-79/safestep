@@ -175,7 +175,19 @@ export default function Dashboard() {
       setSosAlertId(docRef.id);
     } catch (e) { console.error('❌ Volunteer Alert Error:', e); }
 
-    // Global Recording was started at T=10
+    // Auto-save the 10-second 'Trigger Event' evidence immediately!
+    stopEmergencyRecording();
+    
+    // Start the continuous 'Incident Response' recording
+    setTimeout(() => {
+      // Re-capture fresh stream for the continuous phase
+      navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+        .then(stream => {
+          setSosMediaStream(stream);
+          startEmergencyRecording(stream);
+        })
+        .catch(e => console.error("❌ Follow-up Recording failed:", e));
+    }, 1500); // Small 1.5s delay to ensure the first upload finalizes
   };
 
   const startGuidance = () => {
