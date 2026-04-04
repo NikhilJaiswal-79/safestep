@@ -157,8 +157,8 @@ export default function Dashboard() {
     const lat = sosLocation?.lat || 0;
     const lng = sosLocation?.lng || 0;
     
-    // Use the official Maps URLs format which opens correctly on mobile apps
-    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    // Use URL encoding for the comma (%2C) so SMS apps don't break the clickable link
+    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${lat}%2C${lng}`;
 
     if (nearestSpot) {
       startGuidance();
