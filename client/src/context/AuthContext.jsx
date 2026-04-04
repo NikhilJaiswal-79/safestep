@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
   const [sosStatus, setSosStatus] = useState('');
   const [sosAlertId, setSosAlertId] = useState(null);
   const [sosLocation, setSosLocation] = useState(null);
+  const [sosMediaStream, setSosMediaStream] = useState(null);
 
   // GLOBAL RECORDING STATE
   const [isRecording, setIsRecording] = useState(false);
@@ -162,6 +163,11 @@ export function AuthProvider({ children }) {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
+    // Also stop the tracks on the shared stream
+    if (sosMediaStream) {
+      sosMediaStream.getTracks().forEach(track => track.stop());
+      setSosMediaStream(null);
+    }
   };
 
   // BACKGROUND LOCATION SHARING
@@ -202,11 +208,10 @@ export function AuthProvider({ children }) {
     updateProfile,
     isLocationSharing,
     setIsLocationSharing,
-    sosActive, setSosActive,
-    sosCountdown, setSosCountdown,
-    sosStatus, setSosStatus,
     sosAlertId, setSosAlertId,
     sosLocation, setSosLocation,
+    sosMediaStream, setSosMediaStream,
+    // Recording
     isRecording, startEmergencyRecording, stopEmergencyRecording
   };
 

@@ -23,9 +23,7 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
-  const [preSosActive, setPreSosActive] = useState(false);
   const [preSosCountdown, setPreSosCountdown] = useState(10);
-  const [mediaStream, setMediaStream] = useState(null);
   const [respondersCount, setRespondersCount] = useState(0);
   const [nearestSpot, setNearestSpot] = useState(null);
   const [spotDistance, setSpotDistance] = useState(0);
@@ -107,10 +105,13 @@ export default function Dashboard() {
     setSosCountdown(10);
     if ("vibrate" in navigator) navigator.vibrate([500, 200, 500, 200, 500, 200]);
     
-    // Pre-capture media
+    // Pre-capture media globally
     navigator.mediaDevices.getUserMedia({ audio: true, video: true })
-      .then(stream => setMediaStream(stream))
-      .catch(e => console.error("❌ Media error:", e));
+      .then(stream => {
+        setSosMediaStream(stream);
+        console.log('🎤 Global media stream ready.');
+      })
+      .catch(e => console.error("❌ Media capture error:", e));
 
     // Pre-capture location
     navigator.geolocation.getCurrentPosition((pos) => {
@@ -137,7 +138,9 @@ export default function Dashboard() {
     setSosStatus(t('help_way'));
     const lat = sosLocation?.lat || 0;
     const lng = sosLocation?.lng || 0;
-    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    
+    // Use legacy but robust maps link format for all devices
+    const mapsLink = `https://maps.google.com/maps?q=${lat},${lng}`;
 
     if (nearestSpot) startGuidance();
 
@@ -161,8 +164,8 @@ export default function Dashboard() {
       setSosAlertId(docRef.id);
     } catch (e) { console.error('❌ Volunteer Alert Error:', e); }
 
-    // Global Recording
-    startEmergencyRecording(mediaStream);
+    // Global Recording (using pre-captured stream)
+    startEmergencyRecording(sosMediaStream);
   };
 
   const startGuidance = () => {

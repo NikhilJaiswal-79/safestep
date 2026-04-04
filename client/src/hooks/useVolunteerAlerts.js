@@ -63,9 +63,9 @@ export default function useVolunteerAlerts() {
         const data = doc.data();
         const alertData = { id: doc.id, ...data };
         
-        // Filter by timestamp (Ignore if older than 15 mins)
+        // Filter by timestamp (Ignore if older than 15 mins, but allow if null/just created)
         const alertTime = data.timestamp?.toMillis() || Date.now();
-        if (alertTime < fifteenMinsAgo) return;
+        if (data.timestamp && alertTime < fifteenMinsAgo) return;
 
         // Don't alert for yourself
         if (alertData.victimId === currentUser?.uid) return;
