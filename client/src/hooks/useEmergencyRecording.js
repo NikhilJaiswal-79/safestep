@@ -10,10 +10,10 @@ export default function useEmergencyRecording() {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
 
-  const startRecording = useCallback(async (alertId = null) => {
+  const startRecording = useCallback(async (alertId = null, existingStream = null) => {
     try {
-      // Request BOTH audio and video for maximum evidence
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      // Use existing stream if provided (to bypass user gesture check at T=0)
+      const stream = existingStream || await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment' }, 
         audio: true 
       });

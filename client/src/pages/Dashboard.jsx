@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [countdown, setCountdown] = useState(10);
   const [sosStatus, setSosStatus] = useState('');
   const [alertId, setAlertId] = useState(null);
+  const [mediaStream, setMediaStream] = useState(null);
   const [respondersCount, setRespondersCount] = useState(0);
   const [nearestSpot, setNearestSpot] = useState(null);
   const [spotDistance, setSpotDistance] = useState(0);
@@ -30,8 +31,10 @@ export default function Dashboard() {
   const { startRecording, stopRecording, isRecording } = useEmergencyRecording();
   const [lastEvidenceUrl, setLastEvidenceUrl] = useState(null);
 
-  // API URL for production/dev
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  // API URL for production/dev (Normalization: remove trailing slash)
+  const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const API_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+  console.log('📡 SafeStep API URL:', API_URL);
 
   // Watch countdown to fire actions at T=0
   useEffect(() => {
@@ -152,10 +155,13 @@ export default function Dashboard() {
       navigator.vibrate([500, 200, 500, 200, 500, 200]);
     }
     
-    // PRE-REQUEST: Try to get media permissions now to avoid delay later
+    // PRE-CAPTURE: Start stream NOW on user gesture to avoid "no user gesture" block at T=0
     navigator.mediaDevices.getUserMedia({ audio: true, video: true })
-      .then(s => s.getTracks().forEach(t => t.stop()))
-      .catch(e => console.warn("Media permissions denied or unavailable", e));
+      .then(stream => {
+        console.log('🎤 Media stream captured and ready for T=0');
+        setMediaStream(stream);
+      })
+      .catch(e => console.error("❌ Failed to pre-capture media stream:", e));
 
     // Find nearest safe spot early for guidance
     navigator.geolocation.getCurrentPosition((pos) => {
@@ -238,12 +244,21 @@ export default function Dashboard() {
         locationLink: mapsLink,
         responders: []
       }).then(docRef => {
+        console.log('📡 Volunteer Alert Broadcasted:', docRef.id);
         setAlertId(docRef.id);
         return docRef.id;
+      }).catch(err => {
+        console.error('❌ Failed to broadcast volunteer alert:', err);
+        return null;
       });
 
-      // 3. Start Recording (Simultaneous)
-      const recordPromise = alertPromise.then(id => startRecording(id));
+      // 3. Start Recording IMMEDIATELY (Using pre-captured stream)
+      console.log('🎥 Starting emergency recording...');
+      const recordPromise = startRecording(null, mediaStream).then(async (recorder) => {
+         const id = await alertPromise;
+         if (id) console.log('🔗 Recording will be linked to Alert:', id);
+         return recorder;
+      });
 
       // 4. Start Voice Guidance (Simultaneous)
       if (nearestSpot) {
@@ -251,9 +266,11 @@ export default function Dashboard() {
       }
 
       // Handle outcomes
-      Promise.all([smsPromise, alertPromise, recordPromise])
-        .then(() => console.log('✅ All SOS actions initialized successfully.'))
-        .catch(err => console.error('❌ One or more SOS actions failed:', err));
+      Promise.allSettled([smsPromise, alertPromise, recordPromise])
+        .then((results) => {
+          console.log('✅ SOS Actions Summary:', results);
+          if (results[0].status === 'rejected') setSosStatus(t('sms_failed_warning'));
+        });
 
     }, (err) => {
       console.error("Location error during SOS fire:", err);
