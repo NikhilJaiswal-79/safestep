@@ -18,6 +18,7 @@ export default function Dashboard() {
     sosStatus, setSosStatus,
     sosAlertId, setSosAlertId,
     sosLocation, setSosLocation,
+    sosMediaStream, setSosMediaStream,
     isRecording, startEmergencyRecording, stopEmergencyRecording
   } = useAuth();
   const { t, i18n } = useTranslation();
