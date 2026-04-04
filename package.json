@@ -1,0 +1,8 @@
+{
+  "name": "safestep-root",
+  "version": "1.0.0",
+  "description": "SafeStep Monorepo",
+  "scripts": {
+    "build": "npm --prefix client install && npm --prefix client run build"
+  }
+}
