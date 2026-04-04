@@ -208,6 +208,10 @@ export function AuthProvider({ children }) {
     updateProfile,
     isLocationSharing,
     setIsLocationSharing,
+    // SOS STATE
+    sosActive, setSosActive,
+    sosCountdown, setSosCountdown,
+    sosStatus, setSosStatus,
     sosAlertId, setSosAlertId,
     sosLocation, setSosLocation,
     sosMediaStream, setSosMediaStream,
