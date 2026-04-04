@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Mic, MapPin, PhoneCall, Route, Map as MapIcon, Rss, HelpCircle, User, Smartphone, Radar, Navigation } from 'lucide-react';
+import { Shield, Mic, MapPin, PhoneCall, Route, Map as MapIcon, Rss, HelpCircle, User, Smartphone, Radar, Navigation, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp, onSnapshot, query, where, getDocs } from 'firebase/firestore';
@@ -28,6 +28,10 @@ export default function Dashboard() {
   const [isGuiding, setIsGuiding] = useState(false);
   const [lastSpokenDist, setLastSpokenDist] = useState(0);
   const { startRecording, stopRecording, isRecording } = useEmergencyRecording();
+  const [lastEvidenceUrl, setLastEvidenceUrl] = useState(null);
+
+  // API URL for production/dev
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   // Watch countdown to fire actions at T=0
   useEffect(() => {
@@ -59,6 +63,9 @@ export default function Dashboard() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setRespondersCount(data.responders?.length || 0);
+        if (data.evidenceUrl) {
+          setLastEvidenceUrl(data.evidenceUrl);
+        }
       }
     });
 
@@ -208,7 +215,7 @@ export default function Dashboard() {
          contacts.push({ name: "Emergency Contact", phone: userData.phone, relation: "Self Fallback" });
       }
 
-      const smsPromise = fetch('http://localhost:5000/api/sos', {
+      const smsPromise = fetch(`${API_URL}/api/sos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,7 +270,7 @@ export default function Dashboard() {
     
     try {
       console.log('📤 Sending Test SMS to:', testNum);
-      const res = await fetch('http://localhost:5000/api/test-sms', {
+      const res = await fetch(`${API_URL}/api/test-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: testNum })
@@ -431,6 +438,19 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 mb-4 bg-red-100 px-3 py-1 rounded-full animate-pulse border border-red-200">
                 <div className="w-2 h-2 rounded-full bg-red-600"></div>
                 <span className="text-[10px] font-bold text-red-600 uppercase">Emergency Recording Active</span>
+              </div>
+            )}
+
+            {lastEvidenceUrl && !sosActive && (
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 mb-6 w-full animate-in fade-in slide-in-from-top-2 duration-500">
+                <p className="text-blue-700 font-bold text-sm mb-3">🔒 Evidence Captured Successfully</p>
+                <button 
+                  onClick={() => window.open(lastEvidenceUrl, '_blank')}
+                  className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 active:scale-95 transition shadow-sm"
+                >
+                  <FolderOpen size={16} />
+                  VIEW EVIDENCE RECORDING
+                </button>
               </div>
             )}
 

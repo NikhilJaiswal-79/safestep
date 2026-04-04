@@ -23,6 +23,7 @@ export default function useVolunteerAlerts() {
   const { currentUser, userData } = useAuth();
   const [activeAlert, setActiveAlert] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  const [dismissedIds, setDismissedIds] = useState([]);
 
   // 1. Keep track of user's current location
   useEffect(() => {
@@ -71,8 +72,8 @@ export default function useVolunteerAlerts() {
           alertData.lng
         );
 
-        // Within 1km
-        if (distance <= 1.0) {
+        // Within 1km and NOT dismissed
+        if (distance <= 1.0 && !dismissedIds.includes(alertData.id)) {
           foundAlert = { ...alertData, distance: distance.toFixed(2) };
         }
       });
@@ -81,7 +82,7 @@ export default function useVolunteerAlerts() {
     });
 
     return () => unsubscribe();
-  }, [userData?.isVolunteer, userLocation, currentUser?.uid]);
+  }, [userData?.isVolunteer, userLocation, currentUser?.uid, dismissedIds]);
 
   const respondToAlert = async (alertId) => {
     if (!currentUser) return;
@@ -96,6 +97,9 @@ export default function useVolunteerAlerts() {
   };
 
   const dismissAlert = () => {
+    if (activeAlert) {
+      setDismissedIds(prev => [...prev, activeAlert.id]);
+    }
     setActiveAlert(null);
   };
 
