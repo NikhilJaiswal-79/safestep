@@ -11,9 +11,45 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userData, setUserData] = useState(null); // Data from Firestore
-  const [loading, setLoading] = useState(true);
   const [isLocationSharing, setIsLocationSharing] = useState(false);
+  
+  // PERSISTENT SOS STATE
+  const [sosActive, setSosActive] = useState(false);
+  const [sosCountdown, setSosCountdown] = useState(10);
+  const [sosStatus, setSosStatus] = useState('');
+  const [sosAlertId, setSosAlertId] = useState(null);
+  const [sosLocation, setSosLocation] = useState(null);
+
+  // Restore SOS state from localStorage on load (survives refreshes)
+  useEffect(() => {
+    const saved = localStorage.getItem('NIRBHAYA_SOS_STATE');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.sosActive) {
+        setSosActive(true);
+        setSosCountdown(parsed.sosCountdown);
+        setSosStatus(parsed.sosStatus || '');
+        setSosAlertId(parsed.sosAlertId);
+        setSosLocation(parsed.sosLocation);
+      }
+    }
+  }, []);
+
+  // Save SOS state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('NIRBHAYA_SOS_STATE', JSON.stringify({
+      sosActive, sosCountdown, sosStatus, sosAlertId, sosLocation
+    }));
+  }, [sosActive, sosCountdown, sosStatus, sosAlertId, sosLocation]);
+
+  // Handle SOS countdown globally
+  useEffect(() => {
+    let timer;
+    if (sosActive && sosCountdown > 0) {
+      timer = setInterval(() => setSosCountdown(prev => prev - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [sosActive, sosCountdown]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -88,7 +124,13 @@ export function AuthProvider({ children }) {
     logout,
     updateProfile,
     isLocationSharing,
-    setIsLocationSharing
+    setIsLocationSharing,
+    // SOS State
+    sosActive, setSosActive,
+    sosCountdown, setSosCountdown,
+    sosStatus, setSosStatus,
+    sosAlertId, setSosAlertId,
+    sosLocation, setSosLocation
   };
 
   return (

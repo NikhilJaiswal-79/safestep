@@ -50,6 +50,7 @@ export default function useVolunteerAlerts() {
       return;
     }
 
+    const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
     const q = query(
       collection(db, 'sos_alerts'),
       where('status', '==', 'active')
@@ -59,8 +60,13 @@ export default function useVolunteerAlerts() {
       let foundAlert = null;
       
       snapshot.forEach((doc) => {
-        const alertData = { id: doc.id, ...doc.data() };
+        const data = doc.data();
+        const alertData = { id: doc.id, ...data };
         
+        // Filter by timestamp (Ignore if older than 15 mins)
+        const alertTime = data.timestamp?.toMillis() || Date.now();
+        if (alertTime < fifteenMinsAgo) return;
+
         // Don't alert for yourself
         if (alertData.victimId === currentUser?.uid) return;
 
