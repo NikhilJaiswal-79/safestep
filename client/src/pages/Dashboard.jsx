@@ -32,9 +32,13 @@ export default function Dashboard() {
   const [lastEvidenceUrl, setLastEvidenceUrl] = useState(null);
 
   // API URL for production/dev (Normalization: remove trailing slash)
-  const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  // Priority: localStorage (manual fix) > Environment Variable > Localhost
+  const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || 'http://localhost:5000';
   const API_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
   console.log('📡 SafeStep API URL:', API_URL);
+  if (API_URL.includes('localhost')) {
+    console.warn('⚠️ Using localhost backend on Vercel! If this is wrong, run: localStorage.setItem("VITE_API_URL", "https://your-backend-url") and refresh.');
+  }
 
   // Watch countdown to fire actions at T=0
   useEffect(() => {
