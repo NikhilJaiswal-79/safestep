@@ -1,96 +1,83 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Download, Trash2, Video, Mic, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Download, Trash2, Video, Mic, FolderOpen, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { storage, db } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, query, where, getDocs, updateDoc, doc, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
-
-const STORAGE_KEY = 'nirbhaya_nari_evidence';
-
-function loadEvidence() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch { return []; }
-}
-
-function saveEvidence(list) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-}
+import { collection, query, where, getDocs, updateDoc, doc, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 
 export default function EvidenceCapture() {
   const { currentUser, userData } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [evidenceList, setEvidenceList] = useState(loadEvidence);
+  const [evidenceList, setEvidenceList] = useState([]);
   const [recording, setRecording] = useState(false);
   const [recordingType, setRecordingType] = useState(null); // 'audio'|'video'
   const [elapsed, setElapsed] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState(''); // 'uploading' | 'success' | 'error'
+  const [uploadMessage, setUploadMessage] = useState('');
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
+  const fallbackUnsubRef = useRef(null);
 
+  // Listen for evidence from Firestore
   useEffect(() => {
     if (!currentUser) return;
     
-    // Try the ordered query first; if the composite index is missing, fall back to unordered
-    let q;
-    try {
-      q = query(
-        collection(db, 'user_evidence'),
-        where('userId', '==', currentUser.uid),
-        orderBy('timestamp', 'desc')
-      );
-    } catch (e) {
-      console.warn('Ordered query failed, using simple query:', e);
-      q = query(
-        collection(db, 'user_evidence'),
-        where('userId', '==', currentUser.uid)
-      );
-    }
+    // Use a simple query without orderBy to avoid needing a composite index
+    const q = query(
+      collection(db, 'user_evidence'),
+      where('userId', '==', currentUser.uid)
+    );
 
     const unsub = onSnapshot(q, (snap) => {
       const records = snap.docs.map(d => ({ 
         id: d.id, 
         ...d.data(),
-        // Convert Firestore timestamp to ISO string for compatibility
         timestamp: d.data().timestamp?.toDate?.()?.toISOString() || new Date().toISOString()
       }));
-      // Sort client-side as a safety net (in case we used the unordered query)
+      // Sort client-side (newest first)
       records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       setEvidenceList(records);
       console.log(`📁 Loaded ${records.length} evidence records`);
     }, (error) => {
-      // If the ordered query fails at runtime (index not built), retry with simple query
-      console.warn('Evidence query error (likely missing index), retrying simple query:', error.message);
-      const fallbackQ = query(
-        collection(db, 'user_evidence'),
-        where('userId', '==', currentUser.uid)
-      );
-      onSnapshot(fallbackQ, (snap) => {
-        const records = snap.docs.map(d => ({ 
-          id: d.id, 
-          ...d.data(),
-          timestamp: d.data().timestamp?.toDate?.()?.toISOString() || new Date().toISOString()
-        }));
-        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setEvidenceList(records);
-        console.log(`📁 Loaded ${records.length} evidence records (fallback)`);
-      });
+      console.error('Evidence query error:', error.message);
     });
-    return () => unsub();
+
+    return () => {
+      unsub();
+      if (fallbackUnsubRef.current) fallbackUnsubRef.current();
+    };
   }, [currentUser]);
 
   const startRecording = async (type) => {
     try {
+      setUploadStatus('');
+      setUploadMessage('');
+      
       const constraints = type === 'video'
         ? { video: { facingMode: 'environment' }, audio: true }
         : { audio: true };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const recorder = new MediaRecorder(stream);
+      
+      // Pick a supported mimeType
+      let mimeType = '';
+      const typesToTry = type === 'video'
+        ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+        : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+      
+      for (const t of typesToTry) {
+        try {
+          if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; }
+        } catch(e) { /* skip */ }
+      }
+      
+      const recorderOptions = mimeType ? { mimeType } : {};
+      const recorder = new MediaRecorder(stream, recorderOptions);
       chunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
@@ -98,45 +85,74 @@ export default function EvidenceCapture() {
       };
 
       recorder.onstop = async () => {
-        const mimeType = type === 'video' ? 'video/webm' : 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type: mimeType });
+        // Immediately snapshot chunks
+        const savedChunks = [...chunksRef.current];
+        
+        if (savedChunks.length === 0) {
+          console.error('❌ No data was recorded');
+          setUploadStatus('error');
+          setUploadMessage('No data was recorded. Please try again.');
+          stream.getTracks().forEach(t => t.stop());
+          setRecording(false);
+          setRecordingType(null);
+          setElapsed(0);
+          clearInterval(timerRef.current);
+          return;
+        }
+
+        const blobMime = type === 'video' ? (mimeType || 'video/webm') : (mimeType || 'audio/webm');
+        const blob = new Blob(savedChunks, { type: blobMime });
         const fileName = `manual_${currentUser?.uid?.slice(0, 6)}_${Date.now()}.webm`;
 
+        console.log(`🎥 Recording stopped. Blob size: ${blob.size} bytes, chunks: ${savedChunks.length}`);
+
         setUploading(true);
+        setUploadStatus('uploading');
+        setUploadMessage('Uploading evidence...');
+
         try {
+          // Upload to Firebase Storage
           const storageRef = ref(storage, `evidence/${currentUser.uid}/${fileName}`);
           await uploadBytes(storageRef, blob);
           const downloadUrl = await getDownloadURL(storageRef);
 
-          // Save to User Evidence collection (UI will auto-update)
+          console.log('✅ Upload complete:', downloadUrl);
+
+          // Save to Firestore user_evidence collection
           await addDoc(collection(db, 'user_evidence'), {
             userId: currentUser.uid,
             fileName,
             url: downloadUrl,
             timestamp: serverTimestamp(),
-            type
+            type,
+            size: blob.size
           });
 
-          // Check if there is an active SOS for this user to link 
-          const q = query(collection(db, 'sos_alerts'), where('victimId', '==', currentUser.uid), where('status', '==', 'active'));
-          const querySnapshot = await getDocs(q);
-          
-          if (!querySnapshot.empty) {
-            const sosDoc = querySnapshot.docs[0];
-            await updateDoc(doc(db, 'sos_alerts', sosDoc.id), { evidenceUrl: downloadUrl });
+          console.log('✅ Saved to Firestore user_evidence');
+          setUploadStatus('success');
+          setUploadMessage('Evidence saved successfully!');
 
-            // Notify backend
-            const productionUrl = 'https://safestep-virid.vercel.app';
-            const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || productionUrl;
-            const API_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
-            await fetch(`${API_URL}/api/sos-evidence`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.uid, evidenceLink: downloadUrl, contacts: userData?.contacts || [] })
-            });
+          // Best-effort: link to active SOS if one exists
+          try {
+            const sosQ = query(
+              collection(db, 'sos_alerts'), 
+              where('victimId', '==', currentUser.uid), 
+              where('status', '==', 'active')
+            );
+            const querySnapshot = await getDocs(sosQ);
+            
+            if (!querySnapshot.empty) {
+              const sosDoc = querySnapshot.docs[0];
+              await updateDoc(doc(db, 'sos_alerts', sosDoc.id), { evidenceUrl: downloadUrl });
+            }
+          } catch (sosErr) {
+            console.warn("Couldn't link to SOS alert (non-critical):", sosErr);
           }
+
         } catch (err) {
-          console.error("Evidence upload failed:", err);
+          console.error("❌ Evidence upload failed:", err);
+          setUploadStatus('error');
+          setUploadMessage(`Upload failed: ${err.message}`);
         } finally {
           setUploading(false);
         }
@@ -149,28 +165,34 @@ export default function EvidenceCapture() {
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      // Use 1-second timeslice to ensure data is captured continuously
+      recorder.start(1000);
       setRecording(true);
       setRecordingType(type);
       setElapsed(0);
       timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+      console.log(`🚀 Manual ${type} recording started (mimeType: ${mimeType || 'default'})`);
     } catch (err) {
+      console.error('Recording start error:', err);
       alert(`Could not access ${type} device: ${err.message}`);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
   };
 
-  const deleteEvidence = (id) => {
-    setEvidenceList(prev => {
-      const updated = prev.filter(e => e.id !== id);
-      saveEvidence(updated.map(e => ({ ...e, url: null })));
-      return updated;
-    });
+  const deleteEvidence = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'user_evidence', id));
+      console.log('🗑️ Evidence deleted from Firestore:', id);
+    } catch (err) {
+      console.error('Delete failed:', err);
+      // Fallback: remove from local state
+      setEvidenceList(prev => prev.filter(e => e.id !== id));
+    }
   };
 
   const downloadEvidence = (item) => {
@@ -206,7 +228,8 @@ export default function EvidenceCapture() {
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => startRecording('audio')}
-              className="bg-white border-2 border-gray-100 p-5 rounded-2xl flex flex-col items-center gap-3 shadow-sm hover:border-primary hover:bg-red-50 transition active:scale-95"
+              disabled={uploading}
+              className="bg-white border-2 border-gray-100 p-5 rounded-2xl flex flex-col items-center gap-3 shadow-sm hover:border-primary hover:bg-red-50 transition active:scale-95 disabled:opacity-50"
             >
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
                 <Mic size={28} className="text-primary" />
@@ -215,7 +238,8 @@ export default function EvidenceCapture() {
             </button>
             <button
               onClick={() => startRecording('video')}
-              className="bg-white border-2 border-gray-100 p-5 rounded-2xl flex flex-col items-center gap-3 shadow-sm hover:border-secondary hover:bg-blue-50 transition active:scale-95"
+              disabled={uploading}
+              className="bg-white border-2 border-gray-100 p-5 rounded-2xl flex flex-col items-center gap-3 shadow-sm hover:border-secondary hover:bg-blue-50 transition active:scale-95 disabled:opacity-50"
             >
               <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
                 <Video size={28} className="text-secondary" />
@@ -233,12 +257,31 @@ export default function EvidenceCapture() {
             </div>
             <div className="text-4xl font-black text-red-600 font-mono">{formatTime(elapsed)}</div>
             <button
-              disabled={uploading}
               onClick={stopRecording}
-              className="px-8 py-3 bg-red-500 text-white font-bold rounded-xl active:scale-95 transition disabled:opacity-50"
+              className="px-8 py-3 bg-red-500 text-white font-bold rounded-xl active:scale-95 transition"
             >
-              {uploading ? "Uploading..." : t('stop_recording')}
+              {t('stop_recording')}
             </button>
+          </div>
+        )}
+
+        {/* Upload Status Banner */}
+        {uploadStatus === 'uploading' && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4 animate-pulse">
+            <Loader2 size={20} className="text-blue-500 animate-spin" />
+            <span className="text-blue-700 font-bold text-sm">{uploadMessage}</span>
+          </div>
+        )}
+        {uploadStatus === 'success' && (
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <CheckCircle size={20} className="text-emerald-500" />
+            <span className="text-emerald-700 font-bold text-sm">{uploadMessage}</span>
+          </div>
+        )}
+        {uploadStatus === 'error' && (
+          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
+            <AlertCircle size={20} className="text-red-500" />
+            <span className="text-red-700 font-bold text-sm">{uploadMessage}</span>
           </div>
         )}
 
