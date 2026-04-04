@@ -586,13 +586,33 @@ export default function Dashboard() {
       </div>
 
       {/* Debug Footer */}
-      <div className="pb-24 px-6 flex justify-center">
-        <button 
-          onClick={sendTestSMS}
-          className="text-[10px] font-bold text-gray-400 border border-gray-200 px-3 py-1 rounded-full uppercase tracking-widest hover:bg-gray-100 transition"
-        >
-          Debug: Send Test SMS
-        </button>
+      <div className="pb-24 px-6 flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Active Backend</span>
+          <span className="text-[10px] font-mono text-blue-500 break-all text-center px-4">{API_URL}</span>
+        </div>
+        
+        <div className="flex gap-2">
+          <button 
+            onClick={sendTestSMS}
+            className="text-[10px] font-bold text-gray-400 border border-gray-200 px-3 py-1 rounded-full uppercase tracking-widest hover:bg-gray-100 transition"
+          >
+            Test SMS
+          </button>
+          
+          <button 
+            onClick={() => {
+              const newUrl = prompt("Enter your Backend URL (e.g. https://safestep-virid.vercel.app):", API_URL);
+              if (newUrl) {
+                localStorage.setItem("VITE_API_URL", newUrl);
+                window.location.reload();
+              }
+            }}
+            className="text-[10px] font-bold text-blue-400 border border-blue-100 px-3 py-1 rounded-full uppercase tracking-widest hover:bg-blue-50 transition"
+          >
+            Update URL
+          </button>
+        </div>
       </div>
 
       {/* Bottom Navigation */}
