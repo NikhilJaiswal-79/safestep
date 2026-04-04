@@ -123,7 +123,7 @@ export default function Onboarding() {
                 <MapPin size={18} />
               </div>
               <p className="text-xs text-blue-800 leading-relaxed font-medium">
-                SafeStep requires **Location** and **Microphone** access to trigger SOS alerts and detect screams.
+                Nirbhaya Nari requires **Location** and **Microphone** access to trigger SOS alerts and detect screams.
               </p>
             </div>
             

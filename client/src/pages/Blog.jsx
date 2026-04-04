@@ -23,15 +23,15 @@ const ARTICLES = [
   },
   {
     id: 2,
-    title: "The Power of Community: How SafeStep Volunteers Save Lives",
-    excerpt: "SafeStep isn't just an app; it's a network of thousands of verified individuals ready to help at a moment's notice.",
+    title: "The Power of Community: How Nirbhaya Nari Volunteers Save Lives",
+    excerpt: "Nirbhaya Nari isn't just an app; it's a network of thousands of verified individuals ready to help at a moment's notice.",
     author: "Community Manager",
     date: "March 20, 2024",
     readTime: "4 min",
     category: "Community",
     image: "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=2064&auto=format&fit=crop",
     content: `
-      Our volunteer network is the heart of SafeStep. When an SOS is triggered, local volunteers receive a precise 
+      Our volunteer network is the heart of Nirbhaya Nari. When an SOS is triggered, local volunteers receive a precise 
       location and can reach the victim often before official emergency services. 
       Being a volunteer means more than just having an app; it means being a vigilant neighbor. 
       Join the movement today by enabling Volunteer Mode in your profile settings.

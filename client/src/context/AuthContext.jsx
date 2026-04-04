@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
         // Use a generic session name for background sharing
         await setDoc(doc(db, 'liveSessions', `bg-${currentUser.uid}`), {
           userId: currentUser.uid,
-          name: userData?.name || 'SafeStep User',
+          name: userData?.name || 'Nirbhaya Nari User',
           lat: latitude,
           lng: longitude,
           updatedAt: new Date().toISOString(),

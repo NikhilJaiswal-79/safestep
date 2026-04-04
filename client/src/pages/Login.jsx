@@ -23,7 +23,7 @@ export default function Login() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6">
       <div className="flex items-center gap-3 mb-10 text-primary">
         <ShieldAlert size={48} className="text-primary animate-pulse" />
-        <h1 className="text-4xl font-bold">SafeStep</h1>
+        <h1 className="text-4xl font-bold">Nirbhaya Nari</h1>
       </div>
 
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-6 text-center">

@@ -7,7 +7,7 @@ import { storage, db } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 
-const STORAGE_KEY = 'safestep_evidence';
+const STORAGE_KEY = 'nirbhaya_nari_evidence';
 
 function loadEvidence() {
   try {

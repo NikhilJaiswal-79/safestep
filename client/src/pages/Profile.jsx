@@ -72,7 +72,7 @@ export default function Profile() {
             {userData?.name?.charAt(0) || currentUser?.email?.charAt(0) || 'U'}
           </div>
           <div>
-            <h1 className="text-xl font-black">{userData?.name || 'SafeStep User'}</h1>
+            <h1 className="text-xl font-black">{userData?.name || 'Nirbhaya Nari User'}</h1>
             <p className="text-blue-200 text-sm">{currentUser?.email || currentUser?.phoneNumber || ''}</p>
           </div>
         </div>

@@ -61,7 +61,7 @@ export default function LiveLocation() {
   };
 
   const shareViaWhatsApp = () => {
-    const text = encodeURIComponent(`I'm sharing my live location with you via SafeStep. Track me here: ${shareableLink}`);
+    const text = encodeURIComponent(`I'm sharing my live location with you via Nirbhaya Nari. Track me here: ${shareableLink}`);
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 

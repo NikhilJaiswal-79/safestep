@@ -3,9 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { Shield, Mic, MapPin, PhoneCall, Route, Map as MapIcon, Rss, HelpCircle, User, Smartphone, Radar, Navigation } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, addDoc, doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, serverTimestamp, onSnapshot, query, where, getDocs } from 'firebase/firestore';
 import useShakeToSOS from '../hooks/useShakeToSOS';
 import useScreamDetection from '../hooks/useScreamDetection';
+import useEmergencyRecording from '../hooks/useEmergencyRecording';
 import { useTranslation } from 'react-i18next';
 import { safeSpots } from '../data/safeSpots';
 
@@ -26,6 +27,14 @@ export default function Dashboard() {
   const [spotDistance, setSpotDistance] = useState(0);
   const [isGuiding, setIsGuiding] = useState(false);
   const [lastSpokenDist, setLastSpokenDist] = useState(0);
+  const { startRecording, stopRecording, isRecording } = useEmergencyRecording();
+
+  // Watch countdown to fire actions at T=0
+  useEffect(() => {
+    if (sosActive && countdown === 0) {
+      fireSOSActions();
+    }
+  }, [sosActive, countdown]);
 
   // Auto-trigger SOS after Pre-SOS 10s delay
   useEffect(() => {
@@ -38,6 +47,23 @@ export default function Dashboard() {
     }
     return () => clearTimeout(timer);
   }, [preSosActive, preSosCountdown]);
+
+  // Listen for responders to active alert
+  useEffect(() => {
+    if (!alertId) {
+      setRespondersCount(0);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(doc(db, 'sos_alerts', alertId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setRespondersCount(data.responders?.length || 0);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [alertId]);
 
   const handleScreamDetected = useCallback(() => {
     if (!sosActive && !preSosActive) {
@@ -112,121 +138,118 @@ export default function Dashboard() {
 
   const triggerSOS = () => {
     setSosActive(true);
-    setSosStatus(t('help_way'));
+    setSosStatus(t('sos_countdown_active'));
+    setCountdown(10); // Reset countdown just in case
+    
     if ("vibrate" in navigator) {
-      navigator.vibrate([500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200]);
+      navigator.vibrate([500, 200, 500, 200, 500, 200]);
     }
     
-    // Use high accuracy for emergency
-    navigator.geolocation.getCurrentPosition(async (pos) => {
+    // PRE-REQUEST: Try to get media permissions now to avoid delay later
+    navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+      .then(s => s.getTracks().forEach(t => t.stop()))
+      .catch(e => console.warn("Media permissions denied or unavailable", e));
+
+    // Find nearest safe spot early for guidance
+    navigator.geolocation.getCurrentPosition((pos) => {
       const { latitude, longitude } = pos.coords;
-      const mapsLink = `https://maps.google.com/?q=${latitude},${longitude}`;
-      
-      // 1. Find nearest safe spot (with Hackathon Mode Proxy)
       let closest = null;
       let minDocs = Infinity;
-
-      // HACKATHON MODE: If no real spot is within 1km, create a mock Police Station 300m away
       const nearbySpots = [...safeSpots];
-      const realClosest = safeSpots.reduce((prev, curr) => {
-        const d = getDistance(latitude, longitude, curr.lat, curr.lng);
-        return d < prev.dist ? { spot: curr, dist: d } : prev;
-      }, { spot: null, dist: Infinity });
-
-      if (realClosest.dist > 1000) {
-        const mockPolice = {
-          id: 999,
-          name: "Local Emergency Response Unit",
-          lat: latitude + 0.003, // approx 300m North
-          lng: longitude + 0.002, // approx 200m East
-          type: "Police",
-          address: "Nearby Security Hub"
-        };
-        nearbySpots.push(mockPolice);
-      }
-
-      nearbySpots.forEach(spot => {
+      
+      safeSpots.forEach(spot => {
         const dist = getDistance(latitude, longitude, spot.lat, spot.lng);
         if (dist < minDocs) {
           minDocs = dist;
           closest = spot;
         }
       });
+      
+      // HACKATHON MODE: If no real spot is within 1km, create a mock Police Station 300m away
+      if (minDocs > 1000) {
+        closest = {
+          id: 999,
+          name: "Local Emergency Response Unit",
+          lat: latitude + 0.003,
+          lng: longitude + 0.002,
+          type: "Police",
+          address: "Nearby Security Hub"
+        };
+        minDocs = 400; // approx
+      }
+
       setNearestSpot(closest);
       setSpotDistance(Math.round(minDocs));
+    }, null, { enableHighAccuracy: true });
 
-      // 2. Trigger Voice Prompt (Localized)
-      if (closest) {
-        const msg = new SpeechSynthesisUtterance();
-        const lang = i18n.language || 'en';
-        
-        if (lang === 'hi') {
-          msg.text = `${Math.round(minDocs)} मीटर की दूरी पर सुरक्षित स्थान मिला। ${closest.name} की ओर चलें।`;
-          msg.lang = 'hi-IN';
-        } else if (lang === 'te') {
-          msg.text = `${Math.round(minDocs)} మీటర్ల దూరంలో సురక్షిత ప్రాంతం కనుగొనబడింది. ${closest.name} వైపు వెళ్ళండి.`;
-          msg.lang = 'te-IN';
-        } else {
-          msg.text = `Safe spot found at ${Math.round(minDocs)} meters. Proceed to ${closest.name}.`;
-          msg.lang = 'en-US';
-        }
-        
-        msg.rate = 0.9;
-        window.speechSynthesis.speak(msg);
-      }
-      
-      // Start 10-sec countdown simulation
-      let time = 10;
-      const interval = setInterval(() => {
-        time -= 1;
-        setCountdown(time);
-        if (time <= 0) {
+    // Start 10-sec countdown simulation
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
           clearInterval(interval);
+          return 0;
         }
-      }, 1000);
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
-      try {
-        const contacts = userData?.contacts || [];
-        // HACKATHON FALLBACK: If no contacts, use the user's own number for the demo
-        if (contacts.length === 0) {
-          if (userData?.phone) {
-             console.log("⚠️ No contacts found. Falling back to primary user phone for demo.");
-             contacts.push({ name: "Self (Handoff Test)", phone: userData.phone, relation: "Emergency Fallback" });
-          } else {
-             alert("🚨 SOS CANNOT BE SENT: You haven't added any Trusted Contacts yet!\n\nPlease go to your Profile -> Contacts to add them.");
-             setSosActive(false);
-             setSosStatus('');
-             return;
-          }
-        }
+  const fireSOSActions = async () => {
+    setSosStatus(t('help_way'));
+    console.log('🔥 FIRING ALL SOS ACTIONS SIMULTANEOUSLY...');
 
-        console.log('🚀 Triggering SOS...');
-        const response = await fetch('http://localhost:5000/api/sos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: userData?.uid,
-            userName: userData?.name || 'SafeStep User',
-            userPhone: userData?.phone || '',
-            locationLink: mapsLink,
-            contacts: contacts
-          })
-        });
-        
-        const data = await response.json();
-        console.log('✅ SOS Response:', data);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const mapsLink = `https://maps.google.com/?q=${latitude},${longitude}`;
 
-        if (response.ok) {
-          setSosStatus(t('help_way'));
-        } else {
-          throw new Error(data.error || 'Server rejected the SOS');
-        }
-      } catch (err) {
-        console.error('❌ SOS Fetch Failed:', err);
-        alert(`SOS ALERT ERROR:\n\nMessage: ${err.message}\n\nTIP: Check if your number is verified on Twilio.`);
-        setSosStatus(t('broadcast_active'));
+      // 1. Send SMS to Contacts (Simultaneous)
+      const contacts = userData?.contacts || [];
+      if (contacts.length === 0 && userData?.phone) {
+         contacts.push({ name: "Emergency Contact", phone: userData.phone, relation: "Self Fallback" });
       }
-    }, () => {
+
+      const smsPromise = fetch('http://localhost:5000/api/sos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userData?.uid,
+          userName: userData?.name || 'SafeStep User',
+          userPhone: userData?.phone || '',
+          locationLink: mapsLink,
+          contacts: contacts
+        })
+      });
+
+      // 2. Alert Nearby Volunteers (Simultaneous via Firestore)
+      const alertPromise = addDoc(collection(db, 'sos_alerts'), {
+        victimId: userData?.uid,
+        victimName: userData?.name || 'SafeStep User',
+        lat: latitude,
+        lng: longitude,
+        status: 'active',
+        timestamp: serverTimestamp(),
+        locationLink: mapsLink,
+        responders: []
+      }).then(docRef => {
+        setAlertId(docRef.id);
+        return docRef.id;
+      });
+
+      // 3. Start Recording (Simultaneous)
+      const recordPromise = alertPromise.then(id => startRecording(id));
+
+      // 4. Start Voice Guidance (Simultaneous)
+      if (nearestSpot) {
+        startGuidance();
+      }
+
+      // Handle outcomes
+      Promise.all([smsPromise, alertPromise, recordPromise])
+        .then(() => console.log('✅ All SOS actions initialized successfully.'))
+        .catch(err => console.error('❌ One or more SOS actions failed:', err));
+
+    }, (err) => {
+      console.error("Location error during SOS fire:", err);
       setSosStatus(t('loc_error'));
     }, { enableHighAccuracy: true });
   };
@@ -311,6 +334,7 @@ export default function Dashboard() {
     setSosStatus('');
     setCountdown(10);
     setRespondersCount(0);
+    stopRecording();
     if ("vibrate" in navigator) {
       navigator.vibrate(0);
     }
@@ -345,7 +369,7 @@ export default function Dashboard() {
       {/* Top Bar */}
       <div className="flex justify-between items-center p-4 bg-white shadow-sm shrink-0">
         <h1 className="text-xl font-bold text-primary flex items-center gap-2">
-          <ShieldAlertIcon /> SafeStep
+          <ShieldAlertIcon /> Nirbhaya Nari
         </h1>
         <div className="flex items-center gap-3">
           <span className="font-semibold text-secondary">{userData?.name || 'User'}</span>
@@ -400,6 +424,13 @@ export default function Dashboard() {
                   <Navigation size={18} />
                   {isGuiding ? 'GUIDANCE ACTIVE...' : t('quick_navigate')}
                 </button>
+              </div>
+            )}
+
+            {isRecording && (
+              <div className="flex items-center gap-2 mb-4 bg-red-100 px-3 py-1 rounded-full animate-pulse border border-red-200">
+                <div className="w-2 h-2 rounded-full bg-red-600"></div>
+                <span className="text-[10px] font-bold text-red-600 uppercase">Emergency Recording Active</span>
               </div>
             )}
 

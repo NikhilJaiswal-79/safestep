@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Shield, Zap, Users, Map as MapIcon, 
   ChevronRight, Star, Globe, Smartphone, 
-  Heart, CheckCircle 
+  Heart 
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -41,7 +41,7 @@ export default function Landing() {
           <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(230,57,70,0.4)]">
             <Shield size={24} className="text-white" />
           </div>
-          <span className="text-2xl font-black tracking-tighter">SafeStep</span>
+          <span className="text-2xl font-black tracking-tighter">Nirbhaya Nari</span>
         </div>
         <div className="hidden md:flex items-center gap-8 text-sm font-bold text-gray-400">
           <a href="#features" className="hover:text-white transition">Features</a>
@@ -102,9 +102,9 @@ export default function Landing() {
             <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-primary rounded-[40px] blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
             <div className="relative rounded-[40px] overflow-hidden border border-white/10 bg-[#1e293b]/50 backdrop-blur-xl p-4">
               <img 
-                src="https://images.unsplash.com/photo-1557682250-33bd709cbe85?q=80&w=2024&auto=format&fit=crop" // Fallback placeholder, will replace with generated or better asset
+                src="https://images.unsplash.com/photo-1557682250-33bd709cbe85?q=80&w=2024&auto=format&fit=crop" 
                 srcSet="/safestep_landing_hero_1775125204505.png"
-                alt="SafeStep Hero" 
+                alt="Nirbhaya Nari Hero" 
                 className="rounded-[32px] w-full shadow-2xl"
               />
             </div>
@@ -156,7 +156,7 @@ export default function Landing() {
       {/* Footer */}
       <footer className="py-12 px-6 border-t border-white/5 text-center">
         <p className="text-gray-500 text-sm font-medium flex items-center justify-center gap-2">
-          Made with <Heart size={14} className="text-primary fill-primary" /> for the community. © 2024 SafeStep.
+          Made with <Heart size={14} className="text-primary fill-primary" /> for the community. © 2024 Nirbhaya Nari.
         </p>
       </footer>
     </div>
