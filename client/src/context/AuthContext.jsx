@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from "../firebase";
 
 const AuthContext = createContext();
 
@@ -86,6 +88,71 @@ export function AuthProvider({ children }) {
     setUserData(prev => ({ ...prev, ...data }));
   };
 
+  // GLOBAL RECORDING ACTIONS
+  const startEmergencyRecording = async (existingStream = null) => {
+    try {
+      const stream = existingStream || await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' }, 
+        audio: true 
+      });
+      
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const fileName = `emergency_${currentUser?.uid?.slice(0, 6)}_${Date.now()}.webm`;
+        
+        console.log('🎥 Recording stopped. Uploading evidence...');
+        
+        try {
+          const storageRef = ref(storage, `evidence/${currentUser.uid}/${fileName}`);
+          await uploadBytes(storageRef, blob);
+          const downloadUrl = await getDownloadURL(storageRef);
+
+          // Find the active SOS for this user
+          const q = query(
+            collection(db, 'sos_alerts'), 
+            where('victimId', '==', currentUser.uid), 
+            where('status', '==', 'active')
+          );
+          const snap = await getDocs(q);
+          
+          if (!snap.empty) {
+            const targetAlertId = snap.docs[0].id;
+            await updateDoc(doc(db, 'sos_alerts', targetAlertId), {
+              evidenceUrl: downloadUrl,
+              evidenceTimestamp: serverTimestamp()
+            });
+            console.log('✅ Global Alert updated with evidence link.');
+          }
+        } catch (err) {
+          console.error("Failed to upload emergency evidence:", err);
+        }
+        
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      console.log('🚀 Global emergency recording started...');
+    } catch (err) {
+      console.error("Could not start global recording:", err);
+    }
+  };
+
+  const stopEmergencyRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
   // BACKGROUND LOCATION SHARING
   useEffect(() => {
     let interval = null;
@@ -130,7 +197,9 @@ export function AuthProvider({ children }) {
     sosCountdown, setSosCountdown,
     sosStatus, setSosStatus,
     sosAlertId, setSosAlertId,
-    sosLocation, setSosLocation
+    sosLocation, setSosLocation,
+    // Recording
+    isRecording, startEmergencyRecording, stopEmergencyRecording
   };
 
   return (
