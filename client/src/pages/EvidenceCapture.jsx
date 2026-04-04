@@ -3,9 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Download, Trash2, Video, Mic, FolderOpen, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { storage, db } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, query, where, getDocs, updateDoc, doc, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { uploadToCloudinary } from '../utils/cloudinary';
 
 export default function EvidenceCapture() {
   const { currentUser, userData } = useAuth();
@@ -111,10 +111,8 @@ export default function EvidenceCapture() {
         setUploadMessage('Uploading evidence...');
 
         try {
-          // Upload to Firebase Storage
-          const storageRef = ref(storage, `evidence/${currentUser.uid}/${fileName}`);
-          await uploadBytes(storageRef, blob);
-          const downloadUrl = await getDownloadURL(storageRef);
+          // Upload to Cloudinary
+          const downloadUrl = await uploadToCloudinary(blob);
 
           console.log('✅ Upload complete:', downloadUrl);
 

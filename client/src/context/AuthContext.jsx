@@ -2,8 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from "../firebase";
+import { uploadToCloudinary } from "../utils/cloudinary";
 
 const AuthContext = createContext();
 
@@ -164,15 +163,13 @@ export function AuthProvider({ children }) {
         const fileName = `emergency_${uid.slice(0, 6)}_${Date.now()}.webm`;
         console.log('🎥 Recording stopped. Uploading evidence...', fileName);
 
-        // Save to user_evidence FIRST (so evidence shows up even if alert-update fails)
+        // Save to Cloudinary FIRST (so evidence shows up even if alert-update fails)
         let downloadUrl = null;
         try {
-          const storageRef = ref(storage, `evidence/${uid}/${fileName}`);
-          await uploadBytes(storageRef, blob);
-          downloadUrl = await getDownloadURL(storageRef);
-          console.log('✅ Evidence uploaded:', downloadUrl);
+          downloadUrl = await uploadToCloudinary(blob);
+          console.log('✅ Evidence uploaded to Cloudinary:', downloadUrl);
         } catch (err) {
-          console.error("Failed to upload emergency evidence to storage:", err);
+          console.error("Failed to upload emergency evidence to Cloudinary:", err);
         }
 
         if (downloadUrl) {
