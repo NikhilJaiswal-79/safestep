@@ -59,7 +59,8 @@ app.post('/api/test-sms', async (req, res) => {
 });
 
 app.post('/api/sos', async (req, res) => {
-  const { userName, locationLink, userPhone } = req.body;
+  const { userName, locationLink, userId } = req.body;
+  const userPhone = req.body.userPhone || req.body.phone;
   const contacts = req.body.contacts || [];
   
   const messageBody = `🚨 SOS ALERT from ${userName}!
@@ -111,6 +112,8 @@ Time: ${new Date().toLocaleString()}`;
         }
       }
     }
+    
+    res.json({ success: true, message: `SOS sent to ${sentCount} contacts`, sentCount });
   } catch (error) {
     console.error('Error sending SOS SMS:', error);
     if (error.code === 21608) {

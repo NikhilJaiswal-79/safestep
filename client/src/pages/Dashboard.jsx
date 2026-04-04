@@ -156,8 +156,8 @@ export default function Dashboard() {
     const lat = sosLocation?.lat || 0;
     const lng = sosLocation?.lng || 0;
     
-    // Use legacy but robust maps link format for all devices
-    const mapsLink = `https://maps.google.com/maps?q=${lat},${lng}`;
+    // Use the official Maps URLs format which opens correctly on mobile apps
+    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
     if (nearestSpot) {
       startGuidance();
@@ -172,7 +172,7 @@ export default function Dashboard() {
       await fetch(`${API_URL}/api/sos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userData?.uid, userName: userData?.name || 'User', locationLink: mapsLink, contacts })
+        body: JSON.stringify({ userId: userData?.uid, userName: userData?.name || 'User', userPhone: userData?.phone, locationLink: mapsLink, contacts })
       });
     } catch (e) { console.error('❌ SMS Error:', e); }
 
