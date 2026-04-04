@@ -224,73 +224,82 @@ export default function Dashboard() {
     setSosStatus(t('help_way'));
     console.log('🔥 FIRING ALL SOS ACTIONS SIMULTANEOUSLY...');
 
-    // Use pre-captured location or fallback to current (non-blocking if possible)
-    const lat = sosLocation?.lat;
-    const lng = sosLocation?.lng;
-    
-    if (!lat || !lng) {
-      console.warn('⚠️ No pre-captured location. Attempting last-second capture...');
-      // Fallback: try one more time or use a default if really stuck
-    }
-
+    const lat = sosLocation?.lat || 0;
+    const lng = sosLocation?.lng || 0;
     const mapsLink = `https://maps.google.com/?q=${lat},${lng}`;
 
-    // 1. Send SMS to Contacts
-    const contacts = userData?.contacts || [];
-    if (contacts.length === 0 && userData?.phone) {
-       contacts.push({ name: "Emergency Contact", phone: userData.phone, relation: "Self Fallback" });
+    // --- STEP 1: VOICE GUIDANCE (Instant & Independent) ---
+    try {
+      if (nearestSpot) {
+        console.log('🔊 Triggering Voice Guidance...');
+        startGuidance();
+      }
+    } catch (e) {
+      console.error('❌ Voice Guidance Error:', e);
     }
 
-    const smsPromise = fetch(`${API_URL}/api/sos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: userData?.uid,
-        userName: userData?.name || 'SafeStep User',
-        userPhone: userData?.phone || '',
-        locationLink: mapsLink,
-        contacts: contacts
-      })
-    }).catch(e => console.error('❌ SMS Fetch Error:', e));
+    // --- STEP 2: SMS ALERTS (Instant & Independent) ---
+    const triggerSMS = async () => {
+      try {
+        const contacts = userData?.contacts || [];
+        if (contacts.length === 0 && userData?.phone) {
+           contacts.push({ name: "Emergency Contact", phone: userData.phone, relation: "Self Fallback" });
+        }
+        console.log('📤 Sending SOS SMS...');
+        await fetch(`${API_URL}/api/sos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userData?.uid,
+            userName: userData?.name || 'SafeStep User',
+            userPhone: userData?.phone || '',
+            locationLink: mapsLink,
+            contacts: contacts
+          })
+        });
+        console.log('✅ SMS Dispatched Successfully');
+      } catch (e) {
+        console.error('❌ SMS Fetch Error:', e);
+        setSosStatus(t('sms_failed_warning'));
+      }
+    };
+    triggerSMS(); // Fire and forget
 
-    // 2. Alert Nearby Volunteers
-    const alertPromise = addDoc(collection(db, 'sos_alerts'), {
-      victimId: userData?.uid,
-      victimName: userData?.name || 'SafeStep User',
-      lat: lat || 0,
-      lng: lng || 0,
-      status: 'active',
-      timestamp: serverTimestamp(),
-      locationLink: mapsLink,
-      responders: []
-    }).then(docRef => {
-      console.log('📡 Volunteer Alert Broadcasted:', docRef.id);
-      setAlertId(docRef.id);
-      return docRef.id;
-    }).catch(err => {
-      console.error('❌ Failed to broadcast volunteer alert:', err);
-      return null;
-    });
+    // --- STEP 3: VOLUNTEER ALERTS (Instant & Independent) ---
+    const triggerVolunteerAlert = async () => {
+      try {
+        console.log('📡 Broadcasting Volunteer Alert...');
+        const docRef = await addDoc(collection(db, 'sos_alerts'), {
+          victimId: userData?.uid,
+          victimName: userData?.name || 'SafeStep User',
+          lat: lat,
+          lng: lng,
+          status: 'active',
+          timestamp: serverTimestamp(),
+          locationLink: mapsLink,
+          responders: []
+        });
+        setAlertId(docRef.id);
+        console.log('✅ Volunteer Alert Live:', docRef.id);
+      } catch (e) {
+        console.error('❌ Volunteer Alert Error:', e);
+      }
+    };
+    triggerVolunteerAlert(); // Fire and forget
 
-    // 3. Start Recording
-    console.log('🎥 Starting emergency recording...');
-    const recordPromise = startRecording(null, mediaStream).then(async (recorder) => {
-       const id = await alertPromise;
-       if (id) console.log('🔗 Recording will be linked to Alert:', id);
-       return recorder;
-    }).catch(e => console.error('❌ Recording Start Error:', e));
-
-    // 4. Start Voice Guidance
-    if (nearestSpot) {
-      startGuidance();
-    }
-
-    // Handle outcomes
-    Promise.allSettled([smsPromise, alertPromise, recordPromise])
-      .then((results) => {
-        console.log('✅ SOS Actions Summary:', results);
-      });
+    // --- STEP 4: EMERGENCY RECORDING (Instant & Independent) ---
+    const triggerRecording = async () => {
+      try {
+        console.log('🎥 Starting Emergency Recording...');
+        await startRecording(null, mediaStream);
+        console.log('✅ Recording Started Successfully');
+      } catch (e) {
+        console.error('❌ Recording Start Error:', e);
+      }
+    };
+    triggerRecording(); // Fire and forget
   };
+ Riverside
 
   const sendTestSMS = async () => {
     const testNum = userData?.phone || (userData?.contacts && userData.contacts[0]?.phone);
