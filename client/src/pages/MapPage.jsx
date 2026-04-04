@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { collection, onSnapshot, query, where, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Star, X as CloseIcon } from 'lucide-react';
 import {
-  MapContainer, TileLayer, CircleMarker, Popup, Circle, useMap
+  MapContainer, TileLayer, CircleMarker, Popup, Circle, useMap, Marker
 } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Shield, TriangleAlert, Crosshair, FileWarning, Navigation, Filter } from 'lucide-react';
@@ -29,6 +29,96 @@ const INCIDENT_COLORS = {
   'Other': '#7F8C8D',
 };
 
+// Custom Marker Icons
+const createPinIcon = (color, iconType = 'dot') => {
+  const iconHtml = `
+    <div style="position: relative; width: 30px; height: 30px;">
+      <div style="background: ${color}; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"></div>
+      <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: white; border-radius: 50%;"></div>
+    </div>
+  `;
+  return L.divIcon({
+    html: iconHtml,
+    className: 'custom-pin',
+    iconSize: [30, 30],
+    iconAnchor: [15, 30],
+  });
+};
+
+const createUserIcon = () => {
+  return L.divIcon({
+    html: `<div style="width: 20px; height: 20px; background: #3B82F6; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px rgba(59,130,246,0.8); animation: pulse 2s infinite;"></div>
+           <style>@keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }</style>`,
+    className: 'user-marker',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+};
+
+// Tirupati Static Data Hub
+const TIRUPATI_LANDMARKS = [
+  // Safe Spots
+  { id: 't1', name: 'SVIMS Hospital', type: 'Hospital', lat: 13.6426, lng: 79.4064, icon: '🏥', color: '#DC2626', isSafe: true },
+  { id: 't2', name: 'RUIA Govt Hospital', type: 'Hospital', lat: 13.6395, lng: 79.4185, icon: '🏥', color: '#DC2626', isSafe: true },
+  { id: 't3', name: 'Railway Station (G RP)', type: 'Police', lat: 13.6279, lng: 79.4194, icon: '🚔', color: '#1E40AF', isSafe: true },
+  { id: 't4', name: 'APSRTC Central Bus Stand', type: 'Safe Hub', lat: 13.6298, lng: 79.4263, icon: '🏢', color: '#059669', isSafe: true },
+  { id: 't5', name: 'Alipiri Mettu Gateway', type: 'Police', lat: 13.6550, lng: 79.3780, icon: '🚔', color: '#1E40AF', isSafe: true },
+  { id: 't6', name: 'East Police Station', type: 'Police', lat: 13.6373, lng: 79.4294, icon: '🚔', color: '#1E40AF', isSafe: true },
+  { id: 't7', name: 'West Police Station', type: 'Police', lat: 13.6300, lng: 79.4100, icon: '🚔', color: '#1E40AF', isSafe: true },
+  { id: 't8', name: 'SPMVV Women\'s University', type: 'Safe Zone', lat: 13.6330, lng: 79.3900, icon: '🎓', color: '#7C3AED', isSafe: true },
+  { id: 't9', name: 'ISKCON Temple Area', type: 'Safe Hub', lat: 13.6500, lng: 79.4250, icon: '🛕', color: '#D97706', isSafe: true },
+  { id: 't10', name: 'Padmavati Temple', type: 'Police', lat: 13.6100, lng: 79.4500, icon: '🚔', color: '#1E40AF', isSafe: true },
+  { id: 't11', name: 'Bairagipatteda Park', type: 'Safe Hub', lat: 13.6150, lng: 79.4100, icon: '🌳', color: '#059669', isSafe: true },
+  { id: 't12', name: 'PGR Cinemas Hub', type: 'Public Instance', lat: 13.6250, lng: 79.4180, icon: '🎬', color: '#D97706', isSafe: true },
+  { id: 't13', name: 'Pasuparthi Supermarket', type: 'Safe Haven', lat: 13.6310, lng: 79.4210, icon: '🛒', color: '#059669', isSafe: true },
+  { id: 't14', name: 'Balaji Colony Center', type: 'Residential Safe', lat: 13.6350, lng: 79.4150, icon: '🏘️', color: '#3B82F6', isSafe: true },
+  { id: 't15', name: 'Bhavani Nagar Square', type: 'Safe Hub', lat: 13.6300, lng: 79.4350, icon: '🏢', color: '#1E40AF', isSafe: true },
+  { id: 't16', name: 'Srinivasam Guest House', type: 'Safe House', lat: 13.6320, lng: 79.4260, icon: '🏠', color: '#059669', isSafe: true },
+  { id: 't17', name: 'Mahathi Auditorium', type: 'Public Instance', lat: 13.6320, lng: 79.4110, icon: '🏛️', color: '#7C3AED', isSafe: true },
+  { id: 't18', name: 'Srinivasa Sports Complex', type: 'Safe Haven', lat: 13.6360, lng: 79.4050, icon: '🏟️', color: '#059669', isSafe: true },
+  { id: 't19', name: 'Reliance Mart Area', type: 'Safe Haven', lat: 13.6200, lng: 79.4250, icon: '🛒', color: '#059669', isSafe: true },
+  
+  // Simulated Incidents/Unsafe Zones for Demo
+  { id: 'i1', type: 'Poor Lighting', lat: 13.6400, lng: 79.4800, description: 'Renigunta Highway - dark stretches at night.', isSafe: false },
+  { id: 'i2', type: 'Unsafe Road', lat: 13.6300, lng: 79.3850, description: 'SVU Backgate Road - deserted after 7PM.', isSafe: false },
+  { id: 'i3', type: 'Suspicious Person', lat: 13.6200, lng: 79.4600, description: 'Tiruchanoor industrial bypass area.', isSafe: false },
+  { id: 'i4', type: 'Eve Teasing', lat: 13.6100, lng: 79.4150, description: 'MR Palli inner bypass reported incidents.', isSafe: false },
+  { id: 'i5', type: 'Stalking', lat: 13.6350, lng: 79.4400, description: 'Auto-stand cluster poorly managed.', isSafe: false },
+  { id: 'i6', type: 'Unsafe Road', lat: 13.6600, lng: 79.4500, description: 'Karakambadi Industrial Road - poorly policed.', isSafe: false },
+  { id: 'i7', type: 'Poor Lighting', lat: 13.6050, lng: 79.4200, description: 'Bairagipatteda back lanes - dark after sunset.', isSafe: false }
+];
+
+// Mock Safe Spots Generator
+function generateSafeSpots(userPos) {
+  const dynamicSpots = [];
+  if (userPos) {
+    const [lat, lng] = userPos;
+    const types = [
+      { label: 'Nearby Pharmacy', type: 'Medical', color: '#059669', icon: '💊' },
+      { label: 'Well-lit Cafe', type: 'Safe Haven', color: '#D97706', icon: '☕' }
+    ];
+
+    types.forEach((t, i) => {
+      const angle = (i * 180) * (Math.PI / 180);
+      const dist = 0.005 + (Math.random() * 0.005);
+      dynamicSpots.push({
+        id: `dyn-${i}`,
+        name: t.label,
+        type: t.type,
+        color: t.color,
+        icon: t.icon,
+        lat: lat + Math.sin(angle) * dist,
+        lng: lng + Math.cos(angle) * dist,
+        distance: (dist * 111).toFixed(1)
+      });
+    });
+  }
+  
+  // Combine with Tirupati static safe spots
+  const staticSafe = TIRUPATI_LANDMARKS.filter(l => l.isSafe);
+  return [...staticSafe, ...dynamicSpots];
+}
+
 function RecenterMap({ position }) {
   const map = useMap();
   useEffect(() => {
@@ -42,6 +132,7 @@ export default function MapPage() {
   const { t } = useTranslation();
   const [userPos, setUserPos] = useState(null);
   const [incidents, setIncidents] = useState([]);
+  const [safeSpots, setSafeSpots] = useState([]);
   const [unsafeZones, setUnsafeZones] = useState([]);
   const [filterType, setFilterType] = useState('All');
   const [filterDate, setFilterDate] = useState('month');
@@ -56,8 +147,16 @@ export default function MapPage() {
   // Get user location
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      (pos) => setUserPos([pos.coords.latitude, pos.coords.longitude]),
-      () => setUserPos([17.385, 78.4867]) // Default: Hyderabad
+      (pos) => {
+        const p = [pos.coords.latitude, pos.coords.longitude];
+        setUserPos(p);
+        setSafeSpots(generateSafeSpots(p));
+      },
+      () => {
+        const p = [17.385, 78.4867];
+        setUserPos(p);
+        setSafeSpots(generateSafeSpots(p));
+      }
     );
   }, []);
 
@@ -74,19 +173,30 @@ export default function MapPage() {
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      // Combine with Tirupati static incidents
+      const staticIncidents = TIRUPATI_LANDMARKS.filter(l => !l.isSafe);
+      data = [...data, ...staticIncidents];
+
       setIncidents(data);
 
       // Group by rounded coords to find unsafe zones (3+ reports)
       const grouped = {};
       data.forEach(inc => {
-        const key = `${inc.latRounded}_${inc.lngRounded}`;
+        const latR = inc.latRounded || Math.round(inc.lat * 100) / 100;
+        const lngR = inc.lngRounded || Math.round(inc.lng * 100) / 100;
+        const key = `${latR}_${lngR}`;
         grouped[key] = (grouped[key] || []);
         grouped[key].push(inc);
       });
       const zones = Object.values(grouped)
-        .filter(g => g.length >= 3)
-        .map(g => ({ lat: g[0].latRounded, lng: g[0].lngRounded, count: g.length }));
+        .filter(g => g.length >= 2) // Reduced to 2 for demo visibility
+        .map(g => {
+          const latR = g[0].latRounded || Math.round(g[0].lat * 100) / 100;
+          const lngR = g[0].lngRounded || Math.round(g[0].lng * 100) / 100;
+          return { lat: latR, lng: lngR, count: g.length };
+        });
       setUnsafeZones(zones);
     });
 
@@ -318,12 +428,13 @@ export default function MapPage() {
           />
           <RecenterMap position={userPos} />
 
-          {/* User's location - blue dot */}
+          {/* User's location - pulsating dot */}
           <CircleMarker
             center={userPos}
-            radius={10}
-            pathOptions={{ fillColor: '#3B82F6', fillOpacity: 1, color: 'white', weight: 3 }}
+            pathOptions={{ fillColor: 'transparent', color: 'transparent' }}
+            radius={2}
           >
+            <Marker position={userPos} icon={createUserIcon()} />
             <Popup>📍 {t('you_are_here')}</Popup>
           </CircleMarker>
 
@@ -332,42 +443,64 @@ export default function MapPage() {
             <Circle
               key={i}
               center={[zone.lat, zone.lng]}
-              radius={300}
-              pathOptions={{ fillColor: '#E63946', fillOpacity: 0.15, color: '#E63946', weight: 1 }}
-            />
+              radius={400}
+              pathOptions={{ fillColor: '#E63946', fillOpacity: 0.2, color: '#E63946', weight: 2, dashArray: '5, 10' }}
+            >
+              <Popup className="custom-popup">
+                <div className="p-1">
+                  <p className="font-black text-red-600 uppercase text-[10px] tracking-widest mb-1">Unsafe Zone</p>
+                  <p className="text-sm font-bold text-secondary">{zone.count} Frequent Incident Reports</p>
+                </div>
+              </Popup>
+            </Circle>
           ))}
 
           {/* Incident markers */}
           {activeTab === 'heatmap' && filteredIncidents.map((inc) => (
-            <CircleMarker
-              key={inc.id}
-              center={[inc.lat, inc.lng]}
-              radius={8}
-              pathOptions={{
-                fillColor: INCIDENT_COLORS[inc.type] || '#E63946',
-                fillOpacity: 0.85,
-                color: 'white',
-                weight: 1.5
-              }}
+            <Marker 
+              key={inc.id} 
+              position={[inc.lat, inc.lng]} 
+              icon={createPinIcon(INCIDENT_COLORS[inc.type] || '#E63946')}
             >
-              <Popup>
-                <div className="text-sm">
-                  <p className="font-bold">{inc.type}</p>
-                  <p className="text-gray-500">{inc.incidentTime ? new Date(inc.incidentTime).toLocaleDateString() : 'Unknown date'}</p>
-                  {inc.description && <p className="mt-1 text-gray-700">{inc.description}</p>}
+              <Popup className="custom-popup">
+                <div className="text-sm p-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: INCIDENT_COLORS[inc.type] }} />
+                    <p className="font-black text-secondary tracking-tight">{inc.type}</p>
+                  </div>
+                  <p className="text-gray-500 text-[10px] uppercase font-bold mb-2">
+                    {inc.incidentTime ? new Date(inc.incidentTime).toLocaleDateString() : 'Community Report'}
+                  </p>
+                  {inc.description && <p className="mt-2 text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-100 text-xs italic">"{inc.description}"</p>}
                 </div>
               </Popup>
-            </CircleMarker>
+            </Marker>
           ))}
 
-          {/* Safe Spots tab - placeholder markers */}
-          {activeTab === 'safespots' && (
-            <>
-              <CircleMarker center={userPos} radius={6} pathOptions={{ fillColor: '#2563EB', fillOpacity: 1, color: 'white', weight: 2 }}>
-                <Popup>🚔 Nearby Police Station<br /><a href="https://maps.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Get Directions</a></Popup>
-              </CircleMarker>
-            </>
-          )}
+          {/* Safe Spots tab - Realistic pins */}
+          {activeTab === 'safespots' && safeSpots.map((spot) => (
+            <Marker 
+              key={spot.id} 
+              position={[spot.lat, spot.lng]} 
+              icon={createPinIcon('#059669')} // Trustworthy green
+            >
+              <Popup className="custom-popup">
+                <div className="text-sm p-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xl">{spot.icon}</span>
+                    <p className="font-black text-green-700">{spot.name}</p>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-3">{spot.type} • {spot.distance} km away</p>
+                  <button 
+                    onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`, '_blank')}
+                    className="w-full py-2 bg-green-600 text-white rounded-lg font-bold text-xs shadow-md active:scale-95 transition flex items-center justify-center gap-1"
+                  >
+                    <Navigation size={12} /> GET DIRECTIONS
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainer>
 
         {/* Floating Action Button for Rating */}

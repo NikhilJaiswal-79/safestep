@@ -74,28 +74,14 @@ export default function Profile() {
           <div>
             <h1 className="text-xl font-black">{userData?.name || 'SafeStep User'}</h1>
             <p className="text-blue-200 text-sm">{currentUser?.email || currentUser?.phoneNumber || ''}</p>
-            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full mt-1 inline-block">
-              {userData?.language || 'English'}
-            </span>
           </div>
         </div>
-
-        {/* Stats bar */}
-        <div className="flex justify-between mt-6 bg-white/10 rounded-2xl p-4">
-          <div className="text-center">
-            <div className="text-2xl font-black">{userData?.contacts?.length || 0}</div>
-            <div className="text-xs text-blue-200">{t('contacts')}</div>
-          </div>
-          <div className="w-px bg-white/20"></div>
-          <div className="text-center">
-            <div className="text-2xl font-black">0</div>
-            <div className="text-xs text-blue-200">{t('journeys')}</div>
-          </div>
-          <div className="w-px bg-white/20"></div>
-          <div className="text-center">
-            <div className="text-2xl font-black">0</div>
-            <div className="text-xs text-blue-200">{t('reports')}</div>
-          </div>
+        
+        {/* Language Badge */}
+        <div className="mt-4 flex gap-2">
+          <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-bold uppercase tracking-widest">
+            {userData?.language === 'hi' ? 'Hindi' : (userData?.language === 'te' ? 'Telugu' : 'English')}
+          </span>
         </div>
       </div>
 

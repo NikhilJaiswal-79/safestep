@@ -43,6 +43,9 @@ export default function Dashboard() {
     if (!sosActive && !preSosActive) {
       setPreSosActive(true);
       setPreSosCountdown(10);
+      if ("vibrate" in navigator) {
+        navigator.vibrate([500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200]);
+      }
     }
   }, [sosActive, preSosActive]);
 
@@ -52,14 +55,48 @@ export default function Dashboard() {
     if (!sosActive && !preSosActive) {
       setPreSosActive(true);
       setPreSosCountdown(10);
+      if ("vibrate" in navigator) {
+        navigator.vibrate([500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200]);
+      }
     }
   }, [sosActive, preSosActive]);
 
   const { isShakeEnabled, toggleShake, permissionError } = useShakeToSOS(handleShakeDetected);
 
+  // WAKE LOCK: Keep screen on for reliability during demo/emergency
+  useEffect(() => {
+    let wakeLock = null;
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('💡 Wake Lock is active (Screen will stay on)');
+        }
+      } catch (err) {
+        console.error(`${err.name}, ${err.message}`);
+      }
+    };
+
+    if (isShakeEnabled || screamDetectOn || sosActive) {
+      requestWakeLock();
+    }
+
+    return () => {
+      if (wakeLock) {
+        wakeLock.release().then(() => {
+          wakeLock = null;
+          console.log('💤 Wake Lock released');
+        });
+      }
+    };
+  }, [isShakeEnabled, screamDetectOn, sosActive]);
+
   const cancelPreSOS = () => {
     setPreSosActive(false);
     setPreSosCountdown(10);
+    if ("vibrate" in navigator) {
+      navigator.vibrate(0);
+    }
   };
 
   const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -76,6 +113,9 @@ export default function Dashboard() {
   const triggerSOS = () => {
     setSosActive(true);
     setSosStatus(t('help_way'));
+    if ("vibrate" in navigator) {
+      navigator.vibrate([500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200]);
+    }
     
     // Use high accuracy for emergency
     navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -167,6 +207,7 @@ export default function Dashboard() {
           body: JSON.stringify({
             userId: userData?.uid,
             userName: userData?.name || 'SafeStep User',
+            userPhone: userData?.phone || '',
             locationLink: mapsLink,
             contacts: contacts
           })
@@ -270,6 +311,9 @@ export default function Dashboard() {
     setSosStatus('');
     setCountdown(10);
     setRespondersCount(0);
+    if ("vibrate" in navigator) {
+      navigator.vibrate(0);
+    }
     
     if (alertId) {
       try {
@@ -305,7 +349,7 @@ export default function Dashboard() {
         </h1>
         <div className="flex items-center gap-3">
           <span className="font-semibold text-secondary">{userData?.name || 'User'}</span>
-          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold overflow-hidden cursor-pointer" onClick={() => navigate('/contacts')}>
+          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold overflow-hidden cursor-pointer" onClick={() => navigate('/profile')}>
              {userData?.name?.charAt(0) || 'U'}
           </div>
         </div>
@@ -438,13 +482,6 @@ export default function Dashboard() {
           <span className="font-semibold text-sm text-secondary">{t('fake_call')}</span>
         </div>
         
-        <div onClick={() => navigate('/journey')} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 cursor-pointer hover:border-purple-300 hover:shadow-md active:scale-95 transition">
-          <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
-            <Route size={24} />
-          </div>
-          <span className="font-semibold text-sm text-secondary">{t('journey')}</span>
-        </div>
-        
         <div onClick={() => navigate('/safe-route')} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 cursor-pointer hover:border-orange-300 hover:shadow-md active:scale-95 transition">
           <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-orange-500">
             <MapIcon size={24} />
@@ -452,11 +489,11 @@ export default function Dashboard() {
           <span className="font-semibold text-sm text-secondary">{t('safe_route')}</span>
         </div>
         
-        <div onClick={() => navigate('/live-location')} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 cursor-pointer hover:border-green-300 hover:shadow-md active:scale-95 transition">
+        <div onClick={() => navigate('/contacts')} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 cursor-pointer hover:border-green-300 hover:shadow-md active:scale-95 transition">
           <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-            <MapPin size={24} />
+            <User size={24} />
           </div>
-          <span className="font-semibold text-sm text-secondary">{t('share_loc')}</span>
+          <span className="font-semibold text-sm text-secondary">{t('add_contacts')}</span>
         </div>
 
         <div onClick={() => navigate('/follower-detector')} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 cursor-pointer hover:border-red-300 hover:shadow-md active:scale-95 transition">

@@ -19,7 +19,13 @@ app.get('/', (req, res) => res.json({ status: 'SafeStep Server is live!', versio
 const formatPhone = (phone) => {
   if (!phone) return null;
   let cleaned = phone.replace(/\D/g, ''); // Remove non-digits
-  if (cleaned.length === 10) return `+91${cleaned}`; // Default to India for hackathon
+  
+  // If it's 10 digits, assume India
+  if (cleaned.length === 10) return `+91${cleaned}`;
+  
+  // If it's already got a country code but no +, add one
+  if (cleaned.length > 10 && !phone.startsWith('+')) return `+${cleaned}`;
+  
   return phone.startsWith('+') ? phone : `+${cleaned}`;
 };
 
@@ -53,50 +59,57 @@ app.post('/api/test-sms', async (req, res) => {
 });
 
 app.post('/api/sos', async (req, res) => {
-  const { userId, userName, locationLink } = req.body;
+  const { userName, locationLink, userPhone } = req.body;
+  const contacts = req.body.contacts || [];
   
-  // Here we would typically fetch the user's trusted contacts from Firestore using Firebase Admin SDK
-  // Since we require Admin SDK `serviceAccountKey.json`, we will simulate getting contacts for now
-  // OR the client could pass them directly in the body for Phase 1.
-  
-  // Assuming body also contains contacts for simplicity in Phase 1
-  const contacts = req.body.contacts || []; 
-  
-  const messageBody = `🚨 EMERGENCY ALERT from ${userName || 'SafeStep User'}!
-I need help immediately.
-My live location: ${locationLink}
-Time: ${new Date().toLocaleString()}
-Please call me or contact authorities.`;
+  const messageBody = `🚨 SOS ALERT from ${userName}!
+📍 Location: ${locationLink}
+🆘 Help is needed immediately!
+Time: ${new Date().toLocaleString()}`;
 
   try {
     let sentCount = 0;
     
-    // Simulate or actually send if Twilio configured
     if (twilioClient && process.env.TWILIO_PHONE_NUMBER !== 'your_twilio_phone_number') {
-      console.log(`📡 SOS Request received. Processing ${contacts.length} contacts...`);
+      console.log(`📡 SOS Request: From ${userName} (${userPhone}). Processing ${contacts.length} contacts...`);
+      
+      // Always try to send to the sender's own phone first (as a verified receipt)
+      const formattedUserPhone = formatPhone(userPhone);
+      if (formattedUserPhone) {
+        console.log(`📤 Sending copy to sender: ${formattedUserPhone}`);
+        await twilioClient.messages.create({
+          body: `✅ SOS CONFIRMED: We are alerting your contacts. Your location: ${locationLink}`,
+          from: process.env.TWILIO_PHONE_NUMBER,
+          to: formattedUserPhone
+        }).catch(err => console.log("User receipt failed (probably unverified):", err.message));
+        sentCount++;
+      }
+
       for (const contact of contacts) {
         const formattedContactPhone = formatPhone(contact.phone);
         if (formattedContactPhone) {
-          console.log(`📤 Dispatching real SMS to: ${formattedContactPhone}`);
-          await twilioClient.messages.create({
-            body: messageBody,
-            from: process.env.TWILIO_PHONE_NUMBER,
-            to: formattedContactPhone
-          });
-          sentCount++;
-        } else {
-          console.log(`⚠️ Invalid phone found for contact: ${contact.name}`);
+          try {
+            console.log(`📤 Dispatching real SMS to: ${formattedContactPhone}`);
+            await twilioClient.messages.create({
+              body: messageBody,
+              from: process.env.TWILIO_PHONE_NUMBER,
+              to: formattedContactPhone
+            });
+            sentCount++;
+          } catch (e) {
+            console.log(`❌ Failed to send to ${contact.name}: ${e.message}`);
+            if (e.code === 21608 && formattedUserPhone) {
+              console.log(`⚠️ Unverified contact. Retrying SOS to sender's own number...`);
+              await twilioClient.messages.create({
+                body: `🚨 SOS FORWARDED: Your contact (${contact.name}) is not verified on Twilio. Original Alert:\n${messageBody}`,
+                from: process.env.TWILIO_PHONE_NUMBER,
+                to: formattedUserPhone
+              });
+              sentCount++;
+            }
+          }
         }
       }
-      if (sentCount > 0) {
-        res.json({ success: true, message: `SOS sent to ${sentCount} contacts`, messageBody });
-      } else {
-        res.status(400).json({ success: false, error: 'No SMS were sent. Did you add Trusted Contacts? Are they verified in Twilio?' });
-      }
-    } else {
-      // Simulate
-      console.log(`[SIMULATED SMS] From: ${process.env.TWILIO_PHONE_NUMBER}\nBody:\n${messageBody}\nTo: ${contacts.map(c => c.phone).join(', ')}`);
-      res.json({ success: true, simulated: true, message: `Simulated SOS sent. Please configure Twilio in .env`, messageBody });
     }
   } catch (error) {
     console.error('Error sending SOS SMS:', error);

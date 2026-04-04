@@ -12,20 +12,21 @@ function generateSessionId() {
 export default function LiveLocation() {
   const { currentUser, userData, isLocationSharing, setIsLocationSharing } = useAuth();
   const navigate = useNavigate();
-  const [sessionId, setSessionId] = useState(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [contactCount, setContactCount] = useState(0);
   const [batteryWarning, setBatteryWarning] = useState(false);
   const intervalRef = useRef(null);
 
+  // Derive the sessionId directly from current user UID
+  const sessionId = currentUser ? `bg-${currentUser.uid}` : null;
+  const shareableLink = sessionId ? `${window.location.origin}/track/${sessionId}` : '';
+
   useEffect(() => {
-    // Battery check
     if (navigator.getBattery) {
       navigator.getBattery().then(battery => {
         if (battery.level <= 0.2) setBatteryWarning(true);
       });
     }
-    return () => stopSharing();
   }, []);
 
   const shareLocation = async (sessionId) => {
@@ -45,33 +46,13 @@ export default function LiveLocation() {
   };
 
   const startSharing = async () => {
-    const sid = generateSessionId();
-    setSessionId(sid);
     setIsLocationSharing(true);
     setContactCount(userData?.contacts?.length || 0);
-
-    // Initial location push
-    await shareLocation(sid);
-
-    // Update every 10 seconds
-    intervalRef.current = setInterval(() => shareLocation(sid), 10000);
-
-    // Auto-expire after 8 hours
-    setTimeout(() => stopSharing(), 8 * 60 * 60 * 1000);
   };
 
   const stopSharing = async () => {
-    clearInterval(intervalRef.current);
-    if (sessionId) {
-      try {
-        await deleteDoc(doc(db, 'liveSessions', sessionId));
-      } catch (_) {}
-    }
     setIsLocationSharing(false);
-    setSessionId(null);
   };
-
-  const shareableLink = sessionId ? `${window.location.origin}/track/${sessionId}` : '';
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareableLink);
@@ -122,35 +103,38 @@ export default function LiveLocation() {
         ) : (
           <div className="flex flex-col gap-4">
             {/* Active banner */}
-            <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-                <div className="w-3 h-3 rounded-full bg-white animate-ping"></div>
+            <div className="bg-green-50 border border-green-200 rounded-2xl p-5 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center shadow-sm">
+                <div className="w-3.5 h-3.5 rounded-full bg-white animate-ping"></div>
               </div>
               <div>
-                <p className="font-bold text-green-700">Live Sharing Active</p>
-                <p className="text-green-600 text-sm">{contactCount} contacts can see you</p>
+                <p className="font-bold text-green-800 text-lg leading-tight italic">Live Sharing ACTIVE</p>
+                <p className="text-green-600 text-sm mt-0.5">Anyone with the link can track your position.</p>
               </div>
             </div>
 
             {/* Shareable link */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <p className="text-sm font-semibold text-gray-600 mb-3">Your tracking link:</p>
-              <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-700 break-all font-mono border border-gray-200">
-                {shareableLink}
+            <div className="bg-white rounded-3xl p-6 shadow-md border border-gray-100 flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">Your Tracking Link</p>
+                <div className="bg-gray-50 rounded-2xl p-4 text-xs text-gray-700 break-all font-mono border border-indigo-50 leading-relaxed shadow-inner">
+                  {shareableLink}
+                </div>
               </div>
-              <div className="flex gap-2 mt-3">
+
+              <div className="flex gap-3">
                 <button
                   onClick={copyLink}
-                  className={`flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition ${copySuccess ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  className={`flex-1 py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all transform active:scale-95 ${copySuccess ? 'bg-green-600 text-white shadow-lg' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
                 >
-                  {copySuccess ? <CheckCircle size={16} /> : <Copy size={16} />}
+                  {copySuccess ? <CheckCircle size={20} /> : <Copy size={20} />}
                   {copySuccess ? 'Copied!' : 'Copy Link'}
                 </button>
                 <button
                   onClick={shareViaWhatsApp}
-                  className="flex-1 py-3 bg-[#25D366] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                  className="flex-1 py-4 bg-[#25D366] text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:bg-[#1ebe57] transition-all transform active:scale-95"
                 >
-                  <Share2 size={16} />
+                  <Share2 size={20} />
                   WhatsApp
                 </button>
               </div>

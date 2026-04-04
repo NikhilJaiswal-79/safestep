@@ -7,7 +7,6 @@ import Contacts from './pages/Contacts';
 import Helplines from './pages/Helplines';
 import FakeCall from './pages/FakeCall';
 import LiveLocation from './pages/LiveLocation';
-import JourneyTracker from './pages/JourneyTracker';
 import EvidenceCapture from './pages/EvidenceCapture';
 import MapPage from './pages/MapPage';
 import ReportIncident from './pages/ReportIncident';
@@ -142,7 +141,6 @@ function App() {
           {/* Phase 2 */}
           <Route path="/fake-call" element={<ProtectedRoute><FakeCall /></ProtectedRoute>} />
           <Route path="/live-location" element={<ProtectedRoute><LiveLocation /></ProtectedRoute>} />
-          <Route path="/journey" element={<ProtectedRoute><JourneyTracker /></ProtectedRoute>} />
           <Route path="/evidence" element={<ProtectedRoute><EvidenceCapture /></ProtectedRoute>} />
 
           {/* Phase 3 */}

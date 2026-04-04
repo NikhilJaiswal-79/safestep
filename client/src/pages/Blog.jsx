@@ -50,7 +50,7 @@ const ARTICLES = [
       Solo travel is one of the most rewarding experiences a woman can have. To ensure your journey is safe:
       1. Research your destination: Know the safe and unsafe neighborhoods.
       2. Share your itinerary: Always keep someone at home informed of your whereabouts.
-      3. Use SafeStep's Journey Tracker: Let the app monitor your transit in real-time.
+      3. Use SafeStep's Live Location: Share your real-time position with contacts.
       4. Stay in public places: Avoid walking alone in secluded areas at night.
     `
   }

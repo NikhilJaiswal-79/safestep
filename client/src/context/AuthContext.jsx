@@ -50,6 +50,36 @@ export function AuthProvider({ children }) {
     setUserData(prev => ({ ...prev, ...data }));
   };
 
+  // BACKGROUND LOCATION SHARING
+  useEffect(() => {
+    let interval = null;
+
+    const pushLocation = async () => {
+      if (!currentUser) return;
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        // Use a generic session name for background sharing
+        await setDoc(doc(db, 'liveSessions', `bg-${currentUser.uid}`), {
+          userId: currentUser.uid,
+          name: userData?.name || 'SafeStep User',
+          lat: latitude,
+          lng: longitude,
+          updatedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+        });
+      }, (err) => console.error("BG Location Error:", err));
+    };
+
+    if (isLocationSharing && currentUser) {
+      pushLocation(); // Initial
+      interval = setInterval(pushLocation, 10000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isLocationSharing, currentUser, userData]);
+
   const value = {
     currentUser,
     userData,

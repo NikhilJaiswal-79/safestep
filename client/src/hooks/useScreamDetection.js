@@ -7,6 +7,9 @@ import { useEffect, useRef, useState } from 'react';
  * 
  * Simplified version (no TensorFlow): uses loudness as proxy for distress sounds.
  */
+const THRESHOLD = 0.25; // Amplitude from 0.0 to 1.0. Screams are usually > 0.2
+const REQUIRED_FRAMES = 120; // 120 frames at ~60fps ≈ 2 seconds of sustained noise
+
 export default function useScreamDetection(onScreamDetected) {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState('');

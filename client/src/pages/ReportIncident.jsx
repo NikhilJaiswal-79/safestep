@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
@@ -25,6 +25,28 @@ export default function ReportIncident() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [manualAddress, setManualAddress] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (!showSuggestions || manualAddress.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(manualAddress)}&limit=5`);
+        if (res.ok) {
+          const data = await res.json();
+          setSuggestions(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch location suggestions", err);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [manualAddress, showSuggestions]);
 
   const detectLocation = () => {
     setLocationLoading(true);
@@ -104,24 +126,65 @@ export default function ReportIncident() {
         {/* Location */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <label className="block text-sm font-semibold text-gray-600 mb-3">📍 Incident Location</label>
+          
           {location ? (
-            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-3">
-              <div>
-                <p className="text-green-700 font-semibold text-sm">Location Detected</p>
-                <p className="text-green-600 text-xs">{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</p>
+            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-3 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-green-100 rounded-lg text-green-700">
+                  <MapPin size={16} />
+                </div>
+                <div>
+                  <p className="text-green-700 font-bold text-xs">LOCATION SET</p>
+                  <p className="text-green-600 text-[10px] break-all">{manualAddress || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}</p>
+                </div>
               </div>
-              <button type="button" onClick={() => setLocation(null)} className="p-1 text-gray-400"><X size={18} /></button>
+              <button 
+                type="button" 
+                onClick={() => { setLocation(null); setManualAddress(''); }} 
+                className="p-1 text-gray-400 hover:text-red-500 transition"
+              >
+                <X size={18} />
+              </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={detectLocation}
-              disabled={locationLoading}
-              className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 hover:border-primary hover:text-primary transition"
-            >
-              <MapPin size={18} />
-              {locationLoading ? 'Detecting...' : 'Detect My Location'}
-            </button>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={detectLocation}
+                disabled={locationLoading}
+                className="w-full py-3 bg-blue-50 text-secondary border border-blue-100 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-blue-100 transition"
+              >
+                <MapPin size={16} />
+                {locationLoading ? 'Detecting...' : 'Detect My Location'}
+              </button>
+              
+              <div className="relative">
+                <input
+                  type="text"
+                  value={manualAddress}
+                  onChange={e => { setManualAddress(e.target.value); setShowSuggestions(true); }}
+                  placeholder="Or enter address manually..."
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary outline-none"
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <ul className="absolute z-20 w-full left-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-40 overflow-y-auto divide-y divide-gray-100">
+                    {suggestions.map((s, i) => (
+                      <li 
+                        key={i} 
+                        className="p-3 text-[10px] text-gray-700 hover:bg-gray-50 cursor-pointer line-clamp-2"
+                        onClick={() => {
+                          setManualAddress(s.display_name);
+                          setLocation({ lat: parseFloat(s.lat), lng: parseFloat(s.lon) });
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        {s.display_name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
