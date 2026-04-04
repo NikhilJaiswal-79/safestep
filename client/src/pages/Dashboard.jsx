@@ -112,10 +112,11 @@ export default function Dashboard() {
     speak(t('sos_countdown_active'));
     
     // Pre-capture media globally AND START RECORDING IMMEDIATELY
-    navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+    const constraints = { audio: true, video: { facingMode: { ideal: "environment" } } };
+    navigator.mediaDevices.getUserMedia(constraints)
       .then(stream => {
         setSosMediaStream(stream);
-        console.log('🎤 Global media stream ready. Starting recording...');
+        console.log('🎤 Global media stream ready (Back Camera). Starting recording...');
         startEmergencyRecording(stream);
       })
       .catch(e => {
@@ -185,27 +186,9 @@ export default function Dashboard() {
       setSosAlertId(docRef.id);
     } catch (e) { console.error('❌ Volunteer Alert Error:', e); }
 
-    // Auto-save the 10-second 'Trigger Event' evidence immediately!
-    stopEmergencyRecording();
-    
-    // Start the continuous 'Incident Response' recording
-    setTimeout(() => {
-      // Re-capture fresh stream for the continuous phase
-      navigator.mediaDevices.getUserMedia({ audio: true, video: true })
-        .then(stream => {
-          setSosMediaStream(stream);
-          startEmergencyRecording(stream);
-        })
-        .catch(() => {
-          // Fallback to audio-only
-          navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-              setSosMediaStream(stream);
-              startEmergencyRecording(stream);
-            })
-            .catch(e => console.error("❌ Follow-up Recording failed:", e));
-        });
-    }, 2000); // 2s delay to ensure the first upload finalizes
+    // Removed the "stop and restart" recording logic here. 
+    // The recording started at countdown 10 will simply continue uninterrupted
+    // even if the user switches to Google Maps, ensuring no data loss during app switch.
   };
 
   const startGuidance = () => {
