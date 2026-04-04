@@ -88,7 +88,8 @@ export default function EvidenceCapture() {
             });
 
             // Send to Backend for SMS notification to contacts
-            const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || 'http://localhost:5000';
+            const productionUrl = 'https://safestep-virid.vercel.app';
+            const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || productionUrl;
             const API_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
             await fetch(`${API_URL}/api/sos-evidence`, {
               method: 'POST',

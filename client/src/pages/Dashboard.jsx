@@ -33,8 +33,9 @@ export default function Dashboard() {
   const [sosLocation, setSosLocation] = useState(null);
 
   // API URL for production/dev (Normalization: remove trailing slash)
-  // Priority: localStorage (manual fix) > Environment Variable > Localhost
-  const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  // Priority: localStorage (manual fix) > Environment Variable > Production Vercel > Localhost
+  const productionUrl = 'https://safestep-virid.vercel.app';
+  const rawApiUrl = localStorage.getItem('VITE_API_URL') || import.meta.env.VITE_API_URL || productionUrl;
   const API_URL = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
   console.log('📡 SafeStep API URL:', API_URL);
   if (API_URL.includes('localhost')) {
