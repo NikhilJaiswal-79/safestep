@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Mic, MapPin, PhoneCall, Map as MapIcon, Rss, HelpCircle, User, Smartphone, Radar, Navigation, MessageSquare } from 'lucide-react';
+import { Shield, Mic, MapPin, PhoneCall, Map as MapIcon, Rss, HelpCircle, User, Smartphone, Radar, Navigation, MessageSquare, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
@@ -111,14 +111,24 @@ export default function Dashboard() {
     setSosCountdown(10);
     speak(t('sos_countdown_active'));
     
-    // Pre-capture media globally AND START RECORDING IMMEDIATELY (to bypass browser blocks)
+    // Pre-capture media globally AND START RECORDING IMMEDIATELY
     navigator.mediaDevices.getUserMedia({ audio: true, video: true })
       .then(stream => {
         setSosMediaStream(stream);
         console.log('🎤 Global media stream ready. Starting recording...');
         startEmergencyRecording(stream);
       })
-      .catch(e => console.error("❌ Media capture error:", e));
+      .catch(e => {
+        console.error("❌ Video capture error, trying audio-only:", e);
+        // Fallback: try audio-only recording if video fails
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(stream => {
+            setSosMediaStream(stream);
+            console.log('🎤 Audio-only stream ready. Starting recording...');
+            startEmergencyRecording(stream);
+          })
+          .catch(e2 => console.error("❌ All media capture failed:", e2));
+      });
 
     // Pre-capture location
     navigator.geolocation.getCurrentPosition((pos) => {
@@ -186,8 +196,16 @@ export default function Dashboard() {
           setSosMediaStream(stream);
           startEmergencyRecording(stream);
         })
-        .catch(e => console.error("❌ Follow-up Recording failed:", e));
-    }, 1500); // Small 1.5s delay to ensure the first upload finalizes
+        .catch(() => {
+          // Fallback to audio-only
+          navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+              setSosMediaStream(stream);
+              startEmergencyRecording(stream);
+            })
+            .catch(e => console.error("❌ Follow-up Recording failed:", e));
+        });
+    }, 2000); // 2s delay to ensure the first upload finalizes
   };
 
   const startGuidance = () => {
@@ -197,18 +215,31 @@ export default function Dashboard() {
   };
 
   const cancelSOS = async () => {
+    // Stop the recording FIRST — the onstop handler has captured IDs at start-time
+    // so it will still upload & save correctly even after we clear state below
+    stopEmergencyRecording();
+
+    // Small delay to let MediaRecorder fire onstop & begin upload
+    await new Promise(r => setTimeout(r, 500));
+
     setSosActive(false);
     setSosStatus('');
     setSosCountdown(10);
-    stopEmergencyRecording();
     if ("vibrate" in navigator) navigator.vibrate(0);
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+    // Stop any remaining media stream tracks
+    if (sosMediaStream) {
+      sosMediaStream.getTracks().forEach(track => track.stop());
+      setSosMediaStream(null);
+    }
+
     if (sosAlertId) {
       try {
         await updateDoc(doc(db, 'sos_alerts', sosAlertId), { status: 'cancelled', cancelledAt: serverTimestamp() });
-        setSosAlertId(null);
       } catch (e) { console.error('Failed to cancel SOS:', e); }
     }
+    setSosAlertId(null);
   };
 
   const navItems = [
@@ -344,7 +375,7 @@ export default function Dashboard() {
               { id: 'fake-call', label: t('fake_call'), color: 'bg-indigo-50', iconColor: 'bg-indigo-600', icon: <PhoneCall size={24} /> },
               { id: 'safe-route', label: t('safe_route'), color: 'bg-orange-50', iconColor: 'bg-orange-500', icon: <Navigation size={24} /> },
               { id: 'contacts', label: t('add_contacts'), color: 'bg-emerald-50', iconColor: 'bg-emerald-600', icon: <User size={24} /> },
-              { id: 'follower-detector', label: t('follower_detector'), color: 'bg-rose-50', iconColor: 'bg-rose-500', icon: <Radar size={24} /> }
+              { id: 'evidence', label: 'Evidence Locker', color: 'bg-violet-50', iconColor: 'bg-violet-600', icon: <Video size={24} /> }
             ].map(card => (
               <div key={card.id} onClick={() => navigate(`/${card.id}`)} className={`${card.color} p-6 rounded-[32px] flex flex-col items-center gap-3 cursor-pointer group active:scale-95 transition-all hover:shadow-lg border border-white`}>
                 <div className={`w-14 h-14 rounded-2xl ${card.iconColor} text-white flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform`}>

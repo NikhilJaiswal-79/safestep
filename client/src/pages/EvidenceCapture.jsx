@@ -34,11 +34,23 @@ export default function EvidenceCapture() {
 
   useEffect(() => {
     if (!currentUser) return;
-    const q = query(
-      collection(db, 'user_evidence'),
-      where('userId', '==', currentUser.uid),
-      orderBy('timestamp', 'desc')
-    );
+    
+    // Try the ordered query first; if the composite index is missing, fall back to unordered
+    let q;
+    try {
+      q = query(
+        collection(db, 'user_evidence'),
+        where('userId', '==', currentUser.uid),
+        orderBy('timestamp', 'desc')
+      );
+    } catch (e) {
+      console.warn('Ordered query failed, using simple query:', e);
+      q = query(
+        collection(db, 'user_evidence'),
+        where('userId', '==', currentUser.uid)
+      );
+    }
+
     const unsub = onSnapshot(q, (snap) => {
       const records = snap.docs.map(d => ({ 
         id: d.id, 
@@ -46,7 +58,27 @@ export default function EvidenceCapture() {
         // Convert Firestore timestamp to ISO string for compatibility
         timestamp: d.data().timestamp?.toDate?.()?.toISOString() || new Date().toISOString()
       }));
+      // Sort client-side as a safety net (in case we used the unordered query)
+      records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       setEvidenceList(records);
+      console.log(`📁 Loaded ${records.length} evidence records`);
+    }, (error) => {
+      // If the ordered query fails at runtime (index not built), retry with simple query
+      console.warn('Evidence query error (likely missing index), retrying simple query:', error.message);
+      const fallbackQ = query(
+        collection(db, 'user_evidence'),
+        where('userId', '==', currentUser.uid)
+      );
+      onSnapshot(fallbackQ, (snap) => {
+        const records = snap.docs.map(d => ({ 
+          id: d.id, 
+          ...d.data(),
+          timestamp: d.data().timestamp?.toDate?.()?.toISOString() || new Date().toISOString()
+        }));
+        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setEvidenceList(records);
+        console.log(`📁 Loaded ${records.length} evidence records (fallback)`);
+      });
     });
     return () => unsub();
   }, [currentUser]);

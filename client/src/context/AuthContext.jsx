@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from "../firebase";
 
@@ -9,6 +9,23 @@ const AuthContext = createContext();
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+// Helper: pick a supported mimeType for MediaRecorder
+function getSupportedMimeType() {
+  const types = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4',
+    ''  // empty string = browser default
+  ];
+  for (const t of types) {
+    try {
+      if (t === '' || MediaRecorder.isTypeSupported(t)) return t;
+    } catch (e) { /* skip */ }
+  }
+  return '';
 }
 
 export function AuthProvider({ children }) {
@@ -29,6 +46,10 @@ export function AuthProvider({ children }) {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  // Keep a snapshot of the userId at recording-start time so cancel can't null it out
+  const recordingUserIdRef = useRef(null);
+  // Keep the SOS alert id captured at recording-start in case cancelSOS clears it
+  const recordingAlertIdRef = useRef(null);
 
   // Restore SOS state from localStorage on load (survives refreshes)
   useEffect(() => {
@@ -108,46 +129,80 @@ export function AuthProvider({ children }) {
         video: { facingMode: 'environment' }, 
         audio: true 
       });
-      
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+      // Pick a supported mimeType (avoid silent failures)
+      const mimeType = getSupportedMimeType();
+      const recorderOptions = mimeType ? { mimeType } : {};
+      const recorder = new MediaRecorder(stream, recorderOptions);
       chunksRef.current = [];
+
+      // Snapshot user & alert IDs NOW, before cancel can null them out
+      const capturedUserId = currentUser?.uid;
+      const capturedAlertId = sosAlertId;
+      recordingUserIdRef.current = capturedUserId;
+      recordingAlertIdRef.current = capturedAlertId;
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        const fileName = `emergency_${currentUser?.uid?.slice(0, 6)}_${Date.now()}.webm`;
-        
-        console.log('🎥 Recording stopped. Uploading evidence...');
-        
-        try {
-          const storageRef = ref(storage, `evidence/${currentUser.uid}/${fileName}`);
-          await uploadBytes(storageRef, blob);
-          const downloadUrl = await getDownloadURL(storageRef);
+        // Immediately snapshot chunks so a subsequent startRecording can't wipe them
+        const savedChunks = [...chunksRef.current];
+        const detectedMime = mimeType || 'video/webm';
+        const blob = new Blob(savedChunks, { type: detectedMime });
 
-          // Use the persistent SOS Alert ID from state (even if SOS was just cancelled)
-          const targetAlertId = sosAlertId;
-          
-          if (targetAlertId) {
-            await updateDoc(doc(db, 'sos_alerts', targetAlertId), {
-              evidenceUrl: downloadUrl,
-              evidenceTimestamp: serverTimestamp()
+        // Use the IDs captured at start-time (immune to cancelSOS clearing state)
+        const uid = recordingUserIdRef.current || capturedUserId;
+        if (!uid) {
+          console.error('❌ No user ID available for evidence upload');
+          stream.getTracks().forEach(track => track.stop());
+          setIsRecording(false);
+          return;
+        }
+
+        const fileName = `emergency_${uid.slice(0, 6)}_${Date.now()}.webm`;
+        console.log('🎥 Recording stopped. Uploading evidence...', fileName);
+
+        // Save to user_evidence FIRST (so evidence shows up even if alert-update fails)
+        let downloadUrl = null;
+        try {
+          const storageRef = ref(storage, `evidence/${uid}/${fileName}`);
+          await uploadBytes(storageRef, blob);
+          downloadUrl = await getDownloadURL(storageRef);
+          console.log('✅ Evidence uploaded:', downloadUrl);
+        } catch (err) {
+          console.error("Failed to upload emergency evidence to storage:", err);
+        }
+
+        if (downloadUrl) {
+          // Save to user_evidence collection (this is what the Evidence page reads)
+          try {
+            await addDoc(collection(db, 'user_evidence'), {
+              userId: uid,
+              fileName,
+              url: downloadUrl,
+              timestamp: serverTimestamp(),
+              type: 'video'
             });
-            console.log(`✅ Alert ${targetAlertId} updated with evidence link.`);
+            console.log('✅ Evidence saved to user_evidence collection.');
+          } catch (err) {
+            console.error("Failed to save to user_evidence:", err);
           }
 
-          // Also save to a permanent User Evidence collection for the Capture history
-          await addDoc(collection(db, 'user_evidence'), {
-            userId: currentUser.uid,
-            fileName,
-            url: downloadUrl,
-            timestamp: serverTimestamp(),
-            type: 'video'
-          });
-        } catch (err) {
-          console.error("Failed to upload emergency evidence:", err);
+          // Try to link to active SOS alert (best-effort, may already be cancelled)
+          const alertId = recordingAlertIdRef.current || capturedAlertId;
+          if (alertId) {
+            try {
+              await updateDoc(doc(db, 'sos_alerts', alertId), {
+                evidenceUrl: downloadUrl,
+                evidenceTimestamp: serverTimestamp()
+              });
+              console.log(`✅ Alert ${alertId} updated with evidence link.`);
+            } catch (err) {
+              console.error("Failed to update SOS alert (may be cancelled):", err);
+            }
+          }
         }
         
         stream.getTracks().forEach(track => track.stop());
@@ -155,7 +210,8 @@ export function AuthProvider({ children }) {
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      // Use a 1-second timeslice so data is captured continuously (not just on stop)
+      recorder.start(1000);
       setIsRecording(true);
       console.log('🚀 Global emergency recording started...');
     } catch (err) {
@@ -163,12 +219,12 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const stopEmergencyRecording = () => {
+  const stopEmergencyRecording = (alsoStopStream = false) => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
-    // Also stop the tracks on the shared stream
-    if (sosMediaStream) {
+    // Only stop the shared stream if explicitly requested (e.g. full SOS cancel)
+    if (alsoStopStream && sosMediaStream) {
       sosMediaStream.getTracks().forEach(track => track.stop());
       setSosMediaStream(null);
     }
