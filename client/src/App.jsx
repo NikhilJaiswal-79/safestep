@@ -74,7 +74,7 @@ const GlobalVolunteerAlert = () => {
             <AlertTriangle className="text-red-500" size={32} />
           </div>
           <h2 className="text-2xl font-black tracking-tight">EMERGENCY SOS</h2>
-          <p className="text-red-100 text-sm font-bold opacity-90 uppercase">Within {activeAlert.distance} km of you</p>
+          <p className="text-red-100 text-sm font-bold opacity-90 uppercase">Urgent Help Needed</p>
         </div>
 
         {/* Content */}

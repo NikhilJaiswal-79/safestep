@@ -192,9 +192,11 @@ export default function Dashboard() {
   };
 
   const startGuidance = () => {
-    if (!nearestSpot) return;
+    if (!nearestSpot || !sosLocation) return;
     setIsGuiding(true);
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${nearestSpot.lat},${nearestSpot.lng}&travelmode=walking`, '_blank');
+    const origin = `${sosLocation.lat},${sosLocation.lng}`;
+    const dest = `${nearestSpot.lat},${nearestSpot.lng}`;
+    window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=walking&dir_action=navigate`, '_blank');
   };
 
   const cancelSOS = async () => {
