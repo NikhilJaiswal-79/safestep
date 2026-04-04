@@ -24,6 +24,7 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
+  const [preSosActive, setPreSosActive] = useState(false);
   const [preSosCountdown, setPreSosCountdown] = useState(10);
   const [respondersCount, setRespondersCount] = useState(0);
   const [nearestSpot, setNearestSpot] = useState(null);
